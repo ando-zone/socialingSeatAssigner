@@ -246,10 +246,41 @@ export default function RoundPage() {
                         (최대 {group.maxSize}명)
                       </span>
                     </h3>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {enableGenderBalancing && (
-                        <span>남 {maleCount}명, 여 {femaleCount}명</span>
-                      )}
+                    
+                    {/* 성비 정보 - 항상 표시 */}
+                    <div className="mt-2">
+                      <div className="flex justify-center items-center space-x-2 text-sm">
+                        <div className="flex items-center space-x-1">
+                          <span className="w-3 h-3 bg-blue-400 rounded-full"></span>
+                          <span className="font-semibold text-blue-700">남 {maleCount}명</span>
+                        </div>
+                        <div className="text-gray-400">|</div>
+                        <div className="flex items-center space-x-1">
+                          <span className="w-3 h-3 bg-pink-400 rounded-full"></span>
+                          <span className="font-semibold text-pink-700">여 {femaleCount}명</span>
+                        </div>
+                      </div>
+                      
+                      {/* 성비 균형 표시 */}
+                      {(() => {
+                        const idealRatio = group.members.length / 2;
+                        const genderDiff = Math.abs(maleCount - femaleCount);
+                        const isBalanced = genderDiff <= 1;
+                        
+                        return (
+                          <div className="mt-1">
+                            {isBalanced ? (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                                ⚖️ 균형
+                              </span>
+                            ) : (
+                              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">
+                                ⚖️ 차이 {genderDiff}명
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -302,6 +333,50 @@ export default function RoundPage() {
                 <div className="text-sm text-blue-600">만남 진행률</div>
               </div>
             </div>
+            
+            {/* 전체 성비 균형 현황 */}
+            {(() => {
+              const totalMales = groupingData.people.filter(p => p.gender === '남').length;
+              const totalFemales = groupingData.people.filter(p => p.gender === '여').length;
+              const genderedPeople = totalMales + totalFemales;
+              
+              if (genderedPeople > 0) {
+                // 각 그룹의 성비 균형 체크
+                const balancedGroups = currentGroups.filter(group => {
+                  const males = group.members.filter(m => m.gender === '남').length;
+                  const females = group.members.filter(m => m.gender === '여').length;
+                  return Math.abs(males - females) <= 1;
+                }).length;
+                
+                return (
+                  <div className="mt-4 pt-4 border-t border-blue-200">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center text-sm">
+                      <div>
+                        <div className="flex justify-center items-center space-x-2 mb-1">
+                          <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                          <span className="font-bold text-blue-800">{totalMales}명</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="w-2 h-2 bg-pink-400 rounded-full"></span>
+                          <span className="font-bold text-pink-800">{totalFemales}명</span>
+                        </div>
+                        <div className="text-blue-600">전체 성비</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-blue-800">{balancedGroups}/{currentGroups.length}</div>
+                        <div className="text-blue-600">균형 그룹</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-blue-800">
+                          {Math.round((balancedGroups / currentGroups.length) * 100)}%
+                        </div>
+                        <div className="text-blue-600">균형 달성률</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
 

@@ -144,6 +144,129 @@ function calculateLastGroupNumberPenalty(groups: Group[]): number {
   return penalty;
 }
 
+// 성별 균형을 강력하게 보장하는 그룹 생성 함수
+function generateGenderBalancedGroups(
+  people: Person[],
+  groupSizes: number[],
+  previousMeetings: Set<string>,
+  enableGroupNumberAvoidance: boolean
+): Group[] {
+  // 성별로 분리
+  const males = [...people.filter(p => p.gender === '남')];
+  const females = [...people.filter(p => p.gender === '여')];
+  const others = [...people.filter(p => !p.gender || (p.gender !== '남' && p.gender !== '여'))];
+  
+  // 순서를 섞어서 다양성 확보
+  males.sort(() => Math.random() - 0.5);
+  females.sort(() => Math.random() - 0.5);
+  others.sort(() => Math.random() - 0.5);
+  
+  const groups: Group[] = [];
+  let maleIndex = 0;
+  let femaleIndex = 0;
+  let otherIndex = 0;
+  
+  // 각 그룹별로 강제 성별 균형 배치
+  for (let i = 0; i < groupSizes.length; i++) {
+    const groupSize = groupSizes[i];
+    const groupMembers: Person[] = [];
+    
+    if (groupSize === 1) {
+      // 1명 그룹: 남성, 여성, 기타 순서로 배치
+      if (maleIndex < males.length) {
+        groupMembers.push(males[maleIndex++]);
+      } else if (femaleIndex < females.length) {
+        groupMembers.push(females[femaleIndex++]);
+      } else if (otherIndex < others.length) {
+        groupMembers.push(others[otherIndex++]);
+      }
+    } else if (groupSize === 2) {
+      // 2명 그룹: 반드시 남녀 1명씩 (가장 중요!)
+      if (maleIndex < males.length && femaleIndex < females.length) {
+        groupMembers.push(males[maleIndex++]);
+        groupMembers.push(females[femaleIndex++]);
+      } else {
+        // 한쪽 성별이 부족하면 남은 사람들로 채우기
+        while (groupMembers.length < 2) {
+          if (maleIndex < males.length) {
+            groupMembers.push(males[maleIndex++]);
+          } else if (femaleIndex < females.length) {
+            groupMembers.push(females[femaleIndex++]);
+          } else if (otherIndex < others.length) {
+            groupMembers.push(others[otherIndex++]);
+          } else {
+            break;
+          }
+        }
+      }
+    } else {
+      // 3명 이상 그룹: 균등 배치
+      const targetMales = Math.floor(groupSize / 2);
+      const targetFemales = groupSize - targetMales;
+      
+      // 남성 배치
+      for (let j = 0; j < targetMales && maleIndex < males.length; j++) {
+        groupMembers.push(males[maleIndex++]);
+      }
+      
+      // 여성 배치
+      for (let j = 0; j < targetFemales && femaleIndex < females.length; j++) {
+        groupMembers.push(females[femaleIndex++]);
+      }
+      
+      // 부족한 인원 채우기
+      while (groupMembers.length < groupSize) {
+        if (maleIndex < males.length) {
+          groupMembers.push(males[maleIndex++]);
+        } else if (femaleIndex < females.length) {
+          groupMembers.push(females[femaleIndex++]);
+        } else if (otherIndex < others.length) {
+          groupMembers.push(others[otherIndex++]);
+        } else {
+          break;
+        }
+      }
+    }
+    
+    if (groupMembers.length > 0) {
+      groups.push({
+        id: i + 1,
+        members: groupMembers,
+        maxSize: groupSize
+      });
+    }
+  }
+  
+  // 🔥 중요: 남은 사람들을 마지막 그룹에 추가
+  const remainingPeople: Person[] = [];
+  
+  // 남은 사람들 수집
+  while (maleIndex < males.length) {
+    remainingPeople.push(males[maleIndex++]);
+  }
+  while (femaleIndex < females.length) {
+    remainingPeople.push(females[femaleIndex++]);
+  }
+  while (otherIndex < others.length) {
+    remainingPeople.push(others[otherIndex++]);
+  }
+  
+  // 남은 사람들을 마지막 그룹에 추가
+  if (remainingPeople.length > 0 && groups.length > 0) {
+    const lastGroup = groups[groups.length - 1];
+    lastGroup.members.push(...remainingPeople);
+  } else if (remainingPeople.length > 0) {
+    // 그룹이 없으면 새 그룹 생성
+    groups.push({
+      id: 1,
+      members: remainingPeople,
+      maxSize: remainingPeople.length
+    });
+  }
+  
+  return groups;
+}
+
 // 가변 그룹 크기를 지원하는 고급 그룹 생성 함수
 export function generateAdvancedGroups(
   people: Person[],
@@ -161,6 +284,88 @@ export function generateAdvancedGroups(
     maxIterations = 1000 
   } = options;
   
+  // 성별 균형이 활성화되어 있으면 랜덤 + 강력한 페널티 방식 사용
+  if (genderBalancing) {
+    let bestGroups: Group[] = [];
+    let bestScore = Infinity;
+    
+    // 더 많은 반복으로 완벽한 성별 균형 추구
+    for (let iteration = 0; iteration < Math.min(maxIterations, 500); iteration++) {
+      // 완전 랜덤 배치
+      const shuffledPeople = [...people].sort(() => Math.random() - 0.5);
+      const groups: Group[] = [];
+      let personIdx = 0;
+
+      // 각 그룹의 크기에 맞춰 배치
+      for (let i = 0; i < groupSizes.length; i++) {
+        const groupSize = groupSizes[i];
+        if (personIdx + groupSize <= shuffledPeople.length) {
+          const groupMembers = shuffledPeople.slice(personIdx, personIdx + groupSize);
+          groups.push({
+            id: i + 1,
+            members: groupMembers,
+            maxSize: groupSize
+          });
+          personIdx += groupSize;
+        } else {
+          // 남은 인원이 그룹 크기보다 적으면 가능한 만큼만 배치
+          const remainingPeople = shuffledPeople.slice(personIdx);
+          if (remainingPeople.length > 0) {
+            groups.push({
+              id: i + 1,
+              members: remainingPeople,
+              maxSize: groupSize
+            });
+          }
+          break;
+        }
+      }
+      
+      // 점수 계산
+      let totalScore = 0;
+      
+      // 1. 이전 만남 페널티
+      for (const group of groups) {
+        totalScore += calculateGroupScore(group.members, previousMeetings);
+      }
+      
+      // 2. 성별 균형 페널티 (극도로 높은 가중치)
+      for (const group of groups) {
+        const genderScore = calculateGenderBalanceScore(group.members);
+        totalScore += genderScore * 1000; // 🔥 극도로 높은 가중치로 성별 불균형 완전 차단
+      }
+      
+      // 3. 직전 그룹 번호 재사용 페널티
+      if (enableGroupNumberAvoidance) {
+        totalScore += calculateLastGroupNumberPenalty(groups) * 3;
+      }
+      
+      if (totalScore < bestScore) {
+        bestScore = totalScore;
+        bestGroups = groups;
+        
+        // 성별 균형이 완벽하면 조기 종료
+        const genderPenalty = groups.reduce((sum, group) => sum + calculateGenderBalanceScore(group.members), 0);
+        if (genderPenalty === 0) {
+          console.log(`✅ 완벽한 성별 균형 달성! (반복: ${iteration + 1})`);
+          break;
+        }
+      }
+      
+      // 진행률 표시 (개발용)
+      if (iteration % 100 === 0 && iteration > 0) {
+        console.log(`성별 균형 최적화 중... ${iteration}/${Math.min(maxIterations, 500)} (현재 최고점수: ${bestScore})`);
+      }
+    }
+    
+    // 최종 결과 로깅
+    const finalGenderPenalty = bestGroups.reduce((sum, group) => sum + calculateGenderBalanceScore(group.members), 0);
+    console.log(`🎯 성별 균형 최적화 완료! 불균형 점수: ${finalGenderPenalty}`);
+    
+    return bestGroups;
+  }
+  
+  // 기존 랜덤 방식 (성별 균형 비활성화 시)
   let bestGroups: Group[] = [];
   let bestScore = Infinity;
   
@@ -209,14 +414,7 @@ export function generateAdvancedGroups(
       totalScore += calculateGroupScore(group.members, previousMeetings);
     }
     
-    // 2. 성별 균형 페널티 (활성화된 경우)
-    if (genderBalancing) {
-      for (const group of groups) {
-        totalScore += calculateGenderBalanceScore(group.members) * 2; // 가중치 2
-      }
-    }
-    
-    // 3. 직전 그룹 번호 재사용 페널티 (활성화된 경우)
+    // 2. 직전 그룹 번호 재사용 페널티 (활성화된 경우)
     if (enableGroupNumberAvoidance) {
       totalScore += calculateLastGroupNumberPenalty(groups) * 3; // 가중치 3
     }
