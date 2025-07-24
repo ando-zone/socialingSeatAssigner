@@ -2,19 +2,33 @@
 export interface Person {
   name: string;
   id: string;
+  gender?: string; // 성별 추가 (선택사항)
+  previousGroupNumbers: Set<number>; // 이전에 속했던 그룹 번호들
+  groupHistory: { [round: number]: number }; // 라운드별 그룹 히스토리 {라운드: 그룹번호}
+  lastGroupNumber?: number; // 직전 라운드의 그룹 번호 (회피용)
 }
 
 export interface Group {
   id: number;
   members: Person[];
+  maxSize: number; // 그룹별 최대 인원 설정
 }
 
 export interface GroupingState {
   people: Person[];
-  groupSize: number;
+  groupSizes: number[]; // 각 그룹별 최대 인원 배열
   previousMeetings: Set<string>;
   rounds: Group[][];
   currentRound: number;
+}
+
+// 그룹핑 설정 인터페이스
+export interface GroupingConfig {
+  people: Person[];
+  groupSizes?: number[]; // 각 그룹별 크기 지정
+  defaultGroupSize?: number; // 모든 그룹 같은 크기일 때
+  enableGroupNumberAvoidance?: boolean; // 그룹 번호 회피 기능 활성화
+  genderBalancing?: boolean; // 성별 균형 고려
 }
 
 // 두 사람이 만난 적 있는지 확인하는 함수
@@ -37,13 +51,21 @@ function calculateGroupScore(group: Person[], previousMeetings: Set<string>): nu
 }
 
 // 만남을 기록하는 함수
-function addMeetings(groups: Group[], previousMeetings: Set<string>) {
+function addMeetings(groups: Group[], previousMeetings: Set<string>, currentRound: number) {
   for (const group of groups) {
+    // 그룹 내 모든 만남 기록
     for (let i = 0; i < group.members.length; i++) {
       for (let j = i + 1; j < group.members.length; j++) {
         const key = [group.members[i].id, group.members[j].id].sort().join('-');
         previousMeetings.add(key);
       }
+    }
+    
+    // 각 참가자에게 그룹 번호와 라운드 기록
+    for (const person of group.members) {
+      person.previousGroupNumbers.add(group.id);
+      person.groupHistory[currentRound] = group.id;
+      person.lastGroupNumber = group.id; // 직전 그룹 번호 업데이트
     }
   }
 }
@@ -69,7 +91,8 @@ export function generateOptimalGroups(
       const endIdx = startIdx + groupSize;
       groups.push({
         id: i + 1,
-        members: shuffledPeople.slice(startIdx, endIdx)
+        members: shuffledPeople.slice(startIdx, endIdx),
+        maxSize: groupSize // maxSize 프로퍼티 추가
       });
     }
 
@@ -77,6 +100,125 @@ export function generateOptimalGroups(
     let totalScore = 0;
     for (const group of groups) {
       totalScore += calculateGroupScore(group.members, previousMeetings);
+    }
+
+    if (totalScore < bestScore) {
+      bestScore = totalScore;
+      bestGroups = groups;
+      
+      // 완벽한 해답을 찾으면 조기 종료
+      if (totalScore === 0) {
+        break;
+      }
+    }
+  }
+
+  return bestGroups;
+}
+
+// 성별 균형 점수 계산 (낮을수록 좋음)
+function calculateGenderBalanceScore(group: Person[]): number {
+  const maleCount = group.filter(p => p.gender === '남').length;
+  const femaleCount = group.filter(p => p.gender === '여').length;
+  const groupSize = group.length;
+  
+  // 이상적인 비율에서 벗어난 정도
+  const idealMale = Math.floor(groupSize / 2);
+  const idealFemale = groupSize - idealMale;
+  
+  return Math.abs(maleCount - idealMale) + Math.abs(femaleCount - idealFemale);
+}
+
+// 직전 그룹 번호 재사용 페널티 계산 (낮을수록 좋음)
+function calculateLastGroupNumberPenalty(groups: Group[]): number {
+  let penalty = 0;
+  
+  for (const group of groups) {
+    for (const person of group.members) {
+      if (person.lastGroupNumber === group.id) {
+        penalty += 1; // 직전 라운드와 같은 그룹 번호인 경우 페널티
+      }
+    }
+  }
+  
+  return penalty;
+}
+
+// 가변 그룹 크기를 지원하는 고급 그룹 생성 함수
+export function generateAdvancedGroups(
+  people: Person[],
+  groupSizes: number[],
+  previousMeetings: Set<string>,
+  options: {
+    enableGroupNumberAvoidance?: boolean;
+    genderBalancing?: boolean;
+    maxIterations?: number;
+  } = {}
+): Group[] {
+  const { 
+    enableGroupNumberAvoidance = true, 
+    genderBalancing = false, 
+    maxIterations = 1000 
+  } = options;
+  
+  let bestGroups: Group[] = [];
+  let bestScore = Infinity;
+  
+  // 총 배치 가능한 인원 확인
+  const totalCapacity = groupSizes.reduce((sum, size) => sum + size, 0);
+  if (totalCapacity > people.length) {
+    console.warn(`총 그룹 정원(${totalCapacity})이 참가자 수(${people.length})보다 큽니다.`);
+  }
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // 사람들을 섞어서 그룹 생성
+    const shuffledPeople = [...people].sort(() => Math.random() - 0.5);
+    const groups: Group[] = [];
+    let personIdx = 0;
+
+    // 각 그룹의 크기에 맞춰 배치
+    for (let i = 0; i < groupSizes.length; i++) {
+      const groupSize = groupSizes[i];
+      if (personIdx + groupSize <= shuffledPeople.length) {
+        const groupMembers = shuffledPeople.slice(personIdx, personIdx + groupSize);
+        groups.push({
+          id: i + 1,
+          members: groupMembers,
+          maxSize: groupSize
+        });
+        personIdx += groupSize;
+      } else {
+        // 남은 인원이 그룹 크기보다 적으면 가능한 만큼만 배치
+        const remainingPeople = shuffledPeople.slice(personIdx);
+        if (remainingPeople.length > 0) {
+          groups.push({
+            id: i + 1,
+            members: remainingPeople,
+            maxSize: groupSize
+          });
+        }
+        break;
+      }
+    }
+
+    // 점수 계산
+    let totalScore = 0;
+    
+    // 1. 이전 만남 페널티
+    for (const group of groups) {
+      totalScore += calculateGroupScore(group.members, previousMeetings);
+    }
+    
+    // 2. 성별 균형 페널티 (활성화된 경우)
+    if (genderBalancing) {
+      for (const group of groups) {
+        totalScore += calculateGenderBalanceScore(group.members) * 2; // 가중치 2
+      }
+    }
+    
+    // 3. 직전 그룹 번호 재사용 페널티 (활성화된 경우)
+    if (enableGroupNumberAvoidance) {
+      totalScore += calculateLastGroupNumberPenalty(groups) * 3; // 가중치 3
     }
 
     if (totalScore < bestScore) {
@@ -101,42 +243,136 @@ export function parseParticipants(participantsText: string): Person[] {
     .filter(name => name.length > 0)
     .map(name => ({
       name,
-      id: name // 간단히 이름을 ID로 사용
+      id: name, // 간단히 이름을 ID로 사용
+      previousGroupNumbers: new Set(), // 초기화
+      groupHistory: {} // 초기화
     }));
 }
 
-// 그룹핑 상태 관리 클래스
-export class GroupingManager {
+// 고급 그룹핑 상태 관리 클래스
+export class AdvancedGroupingManager {
   private state: GroupingState;
+  private options: {
+    enableGroupNumberAvoidance: boolean;
+    genderBalancing: boolean;
+    maxIterations: number;
+  };
 
-  constructor(people: Person[], groupSize: number) {
+  constructor(config: GroupingConfig) {
+    // 그룹 크기 배열 설정
+    let groupSizes: number[];
+    if (config.groupSizes) {
+      groupSizes = config.groupSizes;
+    } else if (config.defaultGroupSize) {
+      const numGroups = Math.floor(config.people.length / config.defaultGroupSize);
+      groupSizes = Array(numGroups).fill(config.defaultGroupSize);
+    } else {
+      // 기본값: 4명씩
+      const defaultSize = 4;
+      const numGroups = Math.floor(config.people.length / defaultSize);
+      groupSizes = Array(numGroups).fill(defaultSize);
+    }
+
     this.state = {
-      people,
-      groupSize,
+      people: config.people,
+      groupSizes,
       previousMeetings: new Set(),
       rounds: [],
       currentRound: 0
     };
+
+    this.options = {
+      enableGroupNumberAvoidance: config.enableGroupNumberAvoidance ?? true,
+      genderBalancing: config.genderBalancing ?? false,
+      maxIterations: 1000
+    };
   }
 
-  // 새로운 라운드 생성
+  // 새로운 라운드 생성 (고급 기능 포함)
   generateNextRound(): Group[] {
-    const groups = generateOptimalGroups(
+    this.state.currentRound++; // 라운드 번호를 먼저 증가
+    
+    const groups = generateAdvancedGroups(
       this.state.people,
-      this.state.groupSize,
-      this.state.previousMeetings
+      this.state.groupSizes,
+      this.state.previousMeetings,
+      this.options
     );
 
-    // 만남 기록
-    addMeetings(groups, this.state.previousMeetings);
+    // 만남 기록 (현재 라운드 번호 포함)
+    addMeetings(groups, this.state.previousMeetings, this.state.currentRound);
     
     // 라운드 저장
     this.state.rounds.push(groups);
-    this.state.currentRound++;
 
     return groups;
   }
 
+  // 특정 참가자의 그룹 히스토리 조회
+  getPersonHistory(personId: string): { [round: number]: number } | null {
+    const person = this.state.people.find(p => p.id === personId);
+    return person ? person.groupHistory : null;
+  }
+
+  // 참가자 검색
+  searchParticipants(keyword: string): Person[] {
+    return this.state.people.filter(p => 
+      p.name.toLowerCase().includes(keyword.toLowerCase())
+    );
+  }
+
+  // 그룹 번호별 경험자 수 조회
+  getGroupExperienceStats(): { [groupNumber: number]: number } {
+    const stats: { [groupNumber: number]: number } = {};
+    
+    for (let i = 1; i <= this.state.groupSizes.length; i++) {
+      stats[i] = this.state.people.filter(p => p.previousGroupNumbers.has(i)).length;
+    }
+    
+    return stats;
+  }
+
+  // 참가자별 그룹 경험 통계
+  getParticipantStats(): Array<{
+    person: Person;
+    experiencedGroups: number;
+    totalGroups: number;
+    completionRate: number;
+  }> {
+    const totalGroups = this.state.groupSizes.length;
+    
+    return this.state.people.map(person => ({
+      person,
+      experiencedGroups: person.previousGroupNumbers.size,
+      totalGroups,
+      completionRate: person.previousGroupNumbers.size / totalGroups
+    }));
+  }
+
+  // 특정 참가자가 만난 사람들 목록 조회
+  getPersonMeetings(personId: string): Person[] {
+    const person = this.state.people.find(p => p.id === personId);
+    if (!person) return [];
+
+    const metPeople: Person[] = [];
+    
+    for (const otherPerson of this.state.people) {
+      if (person.id === otherPerson.id) continue;
+      
+      const key = [person.id, otherPerson.id].sort().join('-');
+      if (this.state.previousMeetings.has(key)) {
+        metPeople.push(otherPerson);
+      }
+    }
+    
+    return metPeople;
+  }
+
+  // 전체 만남 현황 조회 (디버깅용)
+  getPreviousMeetings(): Set<string> {
+    return this.state.previousMeetings;
+  }
+  
   // 현재 라운드 번호
   getCurrentRound(): number {
     return this.state.currentRound;
@@ -155,11 +391,22 @@ export class GroupingManager {
   // 이론적 최대 라운드 수 계산
   getMaxPossibleRounds(): number {
     const totalPairs = this.state.people.length * (this.state.people.length - 1) / 2;
-    const pairsPerGroup = this.state.groupSize * (this.state.groupSize - 1) / 2;
-    const numGroups = Math.floor(this.state.people.length / this.state.groupSize);
-    const pairsPerRound = numGroups * pairsPerGroup;
+    const avgGroupSize = this.state.groupSizes.reduce((sum, size) => sum + size, 0) / this.state.groupSizes.length;
+    const pairsPerRound = this.state.groupSizes.reduce((sum, size) => sum + size * (size - 1) / 2, 0);
     
     return Math.floor(totalPairs / pairsPerRound);
+  }
+}
+
+// 기존 GroupingManager 클래스 (하위 호환성을 위해 유지)
+export class GroupingManager extends AdvancedGroupingManager {
+  constructor(people: Person[], groupSize: number) {
+    super({
+      people,
+      defaultGroupSize: groupSize,
+      enableGroupNumberAvoidance: false,
+      genderBalancing: false
+    });
   }
 }
 
