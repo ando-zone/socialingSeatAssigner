@@ -8,6 +8,12 @@ export default function ResultPage() {
   const router = useRouter()
   const [result, setResult] = useState<GroupingResult | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [showAddForm, setShowAddForm] = useState<number | null>(null) // 어느 그룹에 추가할지
+  const [newParticipant, setNewParticipant] = useState({
+    name: '',
+    gender: 'male' as 'male' | 'female',
+    mbti: 'extrovert' as 'extrovert' | 'introvert'
+  })
 
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
@@ -20,6 +26,108 @@ export default function ResultPage() {
       router.push('/')
     }
   }, [router])
+
+  // 새로운 참가자를 특정 그룹에 추가
+  const addParticipantToGroup = (groupId: number) => {
+    if (!newParticipant.name.trim() || !result) return
+
+    // 해당 그룹의 기존 멤버들 찾기
+    const targetGroup = result.groups.find(group => group.id === groupId)
+    if (!targetGroup) return
+
+    const existingMemberIds = targetGroup.members.map(member => member.id)
+
+    // 새로운 참가자 객체 생성 (기존 그룹 멤버들과 이미 만났다고 기록)
+    const participant: Participant = {
+      id: Date.now().toString(),
+      name: newParticipant.name.trim(),
+      gender: newParticipant.gender,
+      mbti: newParticipant.mbti,
+      metPeople: [...existingMemberIds], // 현재 그룹의 모든 기존 멤버들과 만났다고 기록
+      groupHistory: [groupId] // 현재 그룹을 히스토리에 추가
+    }
+
+    // 기존 참가자들의 만남 기록도 업데이트 (새 참가자와 만났다고 추가)
+    const updatedParticipants = participants.map(p => {
+      if (existingMemberIds.includes(p.id)) {
+        return {
+          ...p,
+          metPeople: [...(p.metPeople || []), participant.id]
+        }
+      }
+      return p
+    })
+
+    // 새 참가자를 목록에 추가
+    updatedParticipants.push(participant)
+
+    console.log(`새 참가자 "${participant.name}" 그룹 ${groupId}에 추가됨`)
+    console.log(`기존 멤버들과의 만남 기록:`, participant.metPeople)
+    console.log(`기존 멤버들에게도 새 참가자와의 만남 기록 추가됨`)
+
+    // 해당 그룹에 참가자 추가 및 카운트 업데이트
+    const updatedGroups = result.groups.map(group => {
+      if (group.id === groupId) {
+        const updatedMembers = [...group.members, participant]
+        const maleCount = updatedMembers.filter(p => p.gender === 'male').length
+        const femaleCount = updatedMembers.filter(p => p.gender === 'female').length
+        const extrovertCount = updatedMembers.filter(p => p.mbti === 'extrovert').length
+        const introvertCount = updatedMembers.filter(p => p.mbti === 'introvert').length
+        
+        return {
+          ...group,
+          members: updatedMembers,
+          maleCount,
+          femaleCount,
+          extrovertCount,
+          introvertCount
+        }
+      }
+      return group
+    })
+
+    // 새로운 만남 수 재계산
+    let newMeetingsTotal = 0
+    updatedGroups.forEach(group => {
+      for (let i = 0; i < group.members.length; i++) {
+        for (let j = i + 1; j < group.members.length; j++) {
+          const p1 = updatedParticipants.find(p => p.id === group.members[i].id)
+          const p2 = updatedParticipants.find(p => p.id === group.members[j].id)
+          if (p1 && p2 && !(p1.metPeople?.includes(p2.id))) {
+            newMeetingsTotal++
+          }
+        }
+      }
+    })
+
+    // 결과 업데이트
+    const updatedResult = {
+      ...result,
+      groups: updatedGroups,
+      summary: {
+        ...result.summary,
+        newMeetingsCount: newMeetingsTotal
+      }
+    }
+
+    // 상태 업데이트
+    setResult(updatedResult)
+    setParticipants(updatedParticipants)
+
+    // localStorage 업데이트
+    localStorage.setItem('groupingResult', JSON.stringify(updatedResult))
+    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+
+    // 폼 초기화
+    setNewParticipant({ name: '', gender: 'male', mbti: 'extrovert' })
+    setShowAddForm(null)
+  }
+
+  // 추가 폼 취소
+  const cancelAddForm = () => {
+    setNewParticipant({ name: '', gender: 'male', mbti: 'extrovert' })
+    setShowAddForm(null)
+  }
 
   const getBalanceColor = (score: number) => {
     if (score >= 80) return 'text-green-600'
@@ -135,6 +243,68 @@ export default function ResultPage() {
                     </div>
                   )
                 })}
+                
+                {/* 참가자 추가 폼 */}
+                {showAddForm === group.id ? (
+                  <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-700 mb-3">새 참가자 추가</h4>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        placeholder="이름"
+                        value={newParticipant.name}
+                        onChange={(e) => setNewParticipant({...newParticipant, name: e.target.value})}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={newParticipant.gender}
+                          onChange={(e) => setNewParticipant({...newParticipant, gender: e.target.value as 'male' | 'female'})}
+                          className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="male">남성</option>
+                          <option value="female">여성</option>
+                        </select>
+                        
+                        <select
+                          value={newParticipant.mbti}
+                          onChange={(e) => setNewParticipant({...newParticipant, mbti: e.target.value as 'extrovert' | 'introvert'})}
+                          className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="extrovert">외향형</option>
+                          <option value="introvert">내향형</option>
+                        </select>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => addParticipantToGroup(group.id)}
+                          disabled={!newParticipant.name.trim()}
+                          className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white font-medium py-2 px-3 rounded-md text-sm"
+                        >
+                          추가
+                        </button>
+                        <button
+                          onClick={cancelAddForm}
+                          className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-3 rounded-md text-sm"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddForm(group.id)}
+                    className="w-full p-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span className="text-lg mr-1">+</span>
+                      <span className="text-sm">참가자 추가</span>
+                    </div>
+                  </button>
+                )}
               </div>
 
               {/* 새로운 만남 표시 */}
