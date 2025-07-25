@@ -81,18 +81,33 @@ function shouldAvoidGroupNumber(participant: Participant, groupNumber: number): 
 // 최적화된 그룹 배치 알고리즘
 export function createOptimalGroups(
   participants: Participant[], 
-  groupSize: number = 4,
+  groupSizeOrSizes: number | number[] = 4,
   currentRound: number = 1
 ): GroupingResult {
   if (participants.length < 2) {
     throw new Error('최소 2명 이상의 참가자가 필요합니다.')
   }
 
-  console.log(`그룹 배치 시작: 참가자 ${participants.length}명, 그룹 크기 ${groupSize}`)
+  // 그룹 크기 배열 생성
+  let groupSizes: number[]
+  if (Array.isArray(groupSizeOrSizes)) {
+    groupSizes = groupSizeOrSizes
+  } else {
+    // 기존 방식: 동일한 크기로 자동 계산
+    const numGroups = Math.ceil(participants.length / groupSizeOrSizes)
+    groupSizes = Array(numGroups).fill(groupSizeOrSizes)
+  }
 
-  // 필요한 그룹 수 계산
-  const numGroups = Math.ceil(participants.length / groupSize)
-  console.log(`필요한 그룹 수: ${numGroups}`)
+  // 총 예상 인원과 실제 인원 비교
+  const totalExpectedSize = groupSizes.reduce((sum, size) => sum + size, 0)
+  if (totalExpectedSize < participants.length) {
+    throw new Error(`설정된 그룹 크기의 총합(${totalExpectedSize}명)이 참가자 수(${participants.length}명)보다 적습니다.`)
+  }
+
+  const numGroups = groupSizes.length
+  console.log(`그룹 배치 시작: 참가자 ${participants.length}명`)
+  console.log(`그룹 구성: ${groupSizes.map((size, i) => `그룹${i+1}(${size}명)`).join(', ')}`)
+  console.log(`총 ${numGroups}개 그룹, 예상 총 인원: ${totalExpectedSize}명`)
 
   // 그룹 배열 초기화
   const groups: Participant[][] = Array.from({ length: numGroups }, () => [])
@@ -150,7 +165,7 @@ export function createOptimalGroups(
   console.log(`그룹 번호 회피 성공률: ${totalParticipants > 0 ? Math.round((totalAvoidanceSuccess / totalParticipants) * 100) : 0}% (${totalAvoidanceSuccess}/${totalParticipants})`)
 
   // 그룹 균형 최적화
-  optimizeGroupBalance(groups, groupSize)
+  optimizeGroupBalance(groups, groupSizes)
 
   console.log('최적화 완료:', groups.map(g => g.length))
 
@@ -211,29 +226,28 @@ export function createOptimalGroups(
 }
 
 // 그룹 균형 최적화 함수
-function optimizeGroupBalance(groups: Participant[][], targetGroupSize: number) {
+function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[]) {
   const maxIterations = 50
   
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     let improved = false
     
-    // 그룹 크기 균형 맞추기
+    // 그룹 크기를 목표 크기에 맞추기
     for (let i = 0; i < groups.length; i++) {
       for (let j = 0; j < groups.length; j++) {
         if (i === j) continue
         
         const group1 = groups[i]
         const group2 = groups[j]
+        const target1 = targetGroupSizes[i] || 0
+        const target2 = targetGroupSizes[j] || 0
         
-        // 크기 차이가 2 이상인 경우 조정
-        if (group1.length - group2.length >= 2) {
-          // group1에서 group2로 한 명 이동
-          if (group1.length > 1) {
-            const memberToMove = group1.pop()
-            if (memberToMove) {
-              group2.push(memberToMove)
-              improved = true
-            }
+        // group1이 목표보다 크고, group2가 목표보다 작은 경우 이동
+        if (group1.length > target1 && group2.length < target2) {
+          const memberToMove = group1.pop()
+          if (memberToMove) {
+            group2.push(memberToMove)
+            improved = true
           }
         }
       }
