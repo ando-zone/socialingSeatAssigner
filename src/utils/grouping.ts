@@ -68,8 +68,8 @@ function calculateGroupBalance(group: Participant[], groupNumber?: number): numb
     groupAvoidanceScore = group.length > 0 ? membersAvoidingPrevious / group.length : 1
   }
   
-  // 가중 평균 (성별 균형 60%, 새로운 만남 25%, 그룹 번호 회피 10%, MBTI 균형 5%)
-  return genderBalance * 0.6 + newMeetingScore * 0.25 + groupAvoidanceScore * 0.1 + mbtiBalance * 0.05
+  // 가중 평균 (새로운 만남 45%, 성별 균형 35%, 그룹 번호 회피 15%, MBTI 균형 5%)
+  return newMeetingScore * 0.45 + genderBalance * 0.35 + groupAvoidanceScore * 0.15 + mbtiBalance * 0.05
 }
 
 // 참가자가 이전 라운드와 다른 그룹 번호를 가져야 하는지 확인
