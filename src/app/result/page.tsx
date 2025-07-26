@@ -14,6 +14,8 @@ export default function ResultPage() {
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })
+  const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)
+  const [swapMessage, setSwapMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
@@ -129,6 +131,149 @@ export default function ResultPage() {
     setShowAddForm(null)
   }
 
+  // 두 참가자 swap 함수
+  const swapParticipants = (participant1Id: string, group1Id: number, participant2Id: string, group2Id: number) => {
+    if (!result) return
+
+    const updatedGroups = result.groups.map(group => {
+      if (group.id === group1Id) {
+        // group1에서 participant1을 participant2로 교체
+        const updatedMembers = group.members.map(member => 
+          member.id === participant1Id 
+            ? result.groups.find(g => g.id === group2Id)?.members.find(m => m.id === participant2Id)!
+            : member
+        )
+        return { ...group, members: updatedMembers }
+      } else if (group.id === group2Id) {
+        // group2에서 participant2를 participant1로 교체
+        const updatedMembers = group.members.map(member =>
+          member.id === participant2Id
+            ? result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)!
+            : member
+        )
+        return { ...group, members: updatedMembers }
+      }
+      return group
+    })
+
+    // 각 그룹의 통계 재계산
+    const finalGroups = updatedGroups.map(group => {
+      const maleCount = group.members.filter(p => p.gender === 'male').length
+      const femaleCount = group.members.filter(p => p.gender === 'female').length
+      const extrovertCount = group.members.filter(p => p.mbti === 'extrovert').length
+      const introvertCount = group.members.filter(p => p.mbti === 'introvert').length
+      
+      // 새로운 만남 수 재계산
+      let newMeetingsCount = 0
+      for (let i = 0; i < group.members.length; i++) {
+        for (let j = i + 1; j < group.members.length; j++) {
+          const p1 = participants.find(p => p.id === group.members[i].id)
+          const p2 = participants.find(p => p.id === group.members[j].id)
+          if (p1 && p2) {
+            const haveMet = p1.metPeople?.includes(p2.id) || false
+            if (!haveMet) {
+              newMeetingsCount++
+            }
+          }
+        }
+      }
+
+      return {
+        ...group,
+        maleCount,
+        femaleCount, 
+        extrovertCount,
+        introvertCount,
+        newMeetingsCount
+      }
+    })
+
+    // 전체 새로운 만남 수 재계산
+    const totalNewMeetings = finalGroups.reduce((sum, group) => sum + group.newMeetingsCount, 0)
+
+    const updatedResult = {
+      ...result,
+      groups: finalGroups,
+      summary: {
+        ...result.summary,
+        newMeetingsCount: totalNewMeetings
+      }
+    }
+
+    // 참가자들의 개별 상태도 업데이트 (그룹 히스토리 수정)
+    const updatedParticipants = participants.map(participant => {
+      if (participant.id === participant1Id) {
+        // participant1의 마지막 그룹 히스토리를 새로운 그룹(group2Id)으로 변경
+        const newGroupHistory = [...(participant.groupHistory || [])]
+        if (newGroupHistory.length > 0) {
+          newGroupHistory[newGroupHistory.length - 1] = group2Id
+        }
+        return { ...participant, groupHistory: newGroupHistory }
+      } else if (participant.id === participant2Id) {
+        // participant2의 마지막 그룹 히스토리를 새로운 그룹(group1Id)으로 변경
+        const newGroupHistory = [...(participant.groupHistory || [])]
+        if (newGroupHistory.length > 0) {
+          newGroupHistory[newGroupHistory.length - 1] = group1Id
+        }
+        return { ...participant, groupHistory: newGroupHistory }
+      }
+      return participant
+    })
+
+    console.log('=== Swap 후 참가자 상태 업데이트 ===')
+    const p1Updated = updatedParticipants.find(p => p.id === participant1Id)
+    const p2Updated = updatedParticipants.find(p => p.id === participant2Id)
+    console.log(`${p1Updated?.name}의 그룹 히스토리:`, p1Updated?.groupHistory)
+    console.log(`${p2Updated?.name}의 그룹 히스토리:`, p2Updated?.groupHistory)
+    
+    // 만남 기록에 대한 안내
+    console.log('💡 만남 기록(metPeople)은 현재 라운드에서 이미 저장되었으므로 수정하지 않습니다.')
+    console.log('💡 다음 라운드에서는 업데이트된 그룹 히스토리를 기반으로 올바르게 배치됩니다.')
+
+    // 상태 업데이트
+    setResult(updatedResult)
+    setParticipants(updatedParticipants)
+    
+    // localStorage 업데이트
+    localStorage.setItem('groupingResult', JSON.stringify(updatedResult))
+    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+
+    // 성공 메시지 표시
+    const p1Name = result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)?.name
+    const p2Name = result.groups.find(g => g.id === group2Id)?.members.find(m => m.id === participant2Id)?.name
+    setSwapMessage(`${p1Name} ↔ ${p2Name} 위치 변경 완료!`)
+    
+    // 3초 후 메시지 자동 제거
+    setTimeout(() => setSwapMessage(null), 3000)
+    
+    console.log(`✅ Swap 완료: ${participant1Id}(그룹${group1Id}) ↔ ${participant2Id}(그룹${group2Id})`)
+  }
+
+  // 드래그 시작
+  const handleDragStart = (participantId: string, groupId: number) => {
+    setDraggedParticipant({ id: participantId, fromGroupId: groupId })
+  }
+
+  // 드래그 오버 (드롭 허용)
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  // 드롭 (swap 실행)
+  const handleDrop = (targetParticipantId: string, targetGroupId: number) => {
+    if (draggedParticipant) {
+      if (draggedParticipant.id !== targetParticipantId) {
+        swapParticipants(
+          draggedParticipant.id, 
+          draggedParticipant.fromGroupId,
+          targetParticipantId,
+          targetGroupId
+        )
+      }
+      setDraggedParticipant(null)
+    }
+  }
+
   const getBalanceColor = (score: number) => {
     if (score >= 80) return 'text-green-600'
     if (score >= 60) return 'text-yellow-600'
@@ -154,6 +299,16 @@ export default function ResultPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Swap 성공 토스트 메시지 */}
+      {swapMessage && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ease-in-out">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center">
+            <span className="mr-2">✅</span>
+            <span className="font-medium">{swapMessage}</span>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
@@ -195,6 +350,25 @@ export default function ResultPage() {
           </div>
         </div>
 
+        {/* 드래그 앤 드랍 안내 */}
+        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <div className="text-blue-400 text-lg">🔄</div>
+            </div>
+            <div className="ml-3">
+              <div className="text-sm text-blue-700">
+                <p className="mb-2">
+                  <strong>위치 변경:</strong> 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.
+                </p>
+                <p className="text-xs text-blue-600">
+                  📝 <strong>업데이트되는 상태:</strong> 그룹 구성, 성별/MBTI 통계, 새로운 만남 수, 그룹 히스토리
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 그룹별 상세 결과 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {result.groups.filter(group => group.members.length > 0).map((group) => (
@@ -225,21 +399,41 @@ export default function ResultPage() {
                 {group.members.map((member) => {
                   const participantHistory = participants.find(p => p.id === member.id)
                   const previousGroups = participantHistory?.groupHistory?.slice(0, -1) || []
+                  const isDragging = draggedParticipant?.id === member.id
                   
                   return (
-                    <div key={member.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                    <div 
+                      key={member.id} 
+                      draggable
+                      onDragStart={() => handleDragStart(member.id, group.id)}
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDrop(member.id, group.id)}
+                      className={`
+                        flex items-center justify-between p-2 border border-gray-200 rounded cursor-move
+                        transition-all duration-200
+                        ${isDragging ? 'opacity-50 scale-95 border-blue-400 bg-blue-50' : 'hover:border-blue-300 hover:bg-blue-50'}
+                        ${draggedParticipant && draggedParticipant.id !== member.id ? 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 shadow-md' : ''}
+                      `}
+                      title={draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : '드래그해서 다른 사람과 위치 바꾸기'}
+                    >
                       <div>
                         <span className="font-medium">{member.name}</span>
                         <div className="text-xs text-gray-500">
                           {member.gender === 'male' ? '남성' : '여성'} · {' '}
                           {member.mbti === 'extrovert' ? '외향' : '내향'}
                         </div>
-                      </div>
-                      {previousGroups.length > 0 && (
-                        <div className="text-xs text-gray-400">
-                          이전: {previousGroups.slice(-3).join(', ')}
+                        <div className="text-xs text-blue-600">
+                          현재 그룹: {group.id}
                         </div>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {previousGroups.length > 0 && (
+                          <div className="text-xs text-gray-400">
+                            이전: {previousGroups.slice(-3).join(', ')}
+                          </div>
+                        )}
+                        <div className="text-gray-400 text-sm">⋮⋮</div>
+                      </div>
                     </div>
                   )
                 })}
@@ -310,22 +504,7 @@ export default function ResultPage() {
               {/* 새로운 만남 표시 */}
               <div className="mt-3 pt-3 border-t border-gray-200">
                 <div className="text-xs text-green-600">
-                  {(() => {
-                    let newMeetings = 0
-                    for (let i = 0; i < group.members.length; i++) {
-                      for (let j = i + 1; j < group.members.length; j++) {
-                        const p1 = participants.find(p => p.id === group.members[i].id)
-                        const p2 = participants.find(p => p.id === group.members[j].id)
-                        if (p1 && p2) {
-                          const p1MetPeople = p1.metPeople?.slice(0, -group.members.length + 1) || []
-                          if (!p1MetPeople.includes(p2.id)) {
-                            newMeetings++
-                          }
-                        }
-                      }
-                    }
-                    return `새로운 만남: ${newMeetings}쌍`
-                  })()}
+새로운 만남: {group.newMeetingsCount}쌍
                 </div>
               </div>
             </div>

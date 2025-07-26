@@ -14,6 +14,7 @@ export interface Group {
   femaleCount: number
   extrovertCount: number
   introvertCount: number
+  newMeetingsCount: number
 }
 
 export interface GroupingResult {
@@ -28,9 +29,20 @@ export interface GroupingResult {
   }
 }
 
-// 두 참가자가 이전에 만났는지 확인
+// 두 참가자가 이전에 만났는지 확인 (양방향)
 function haveMet(p1: Participant, p2: Participant): boolean {
-  return p1.metPeople?.includes(p2.id) || false
+  const p1HasMet = p1.metPeople?.includes(p2.id) || false
+  const p2HasMet = p2.metPeople?.includes(p1.id) || false
+  
+  // 디버깅을 위한 로그
+  if (p1HasMet !== p2HasMet) {
+    console.warn(`⚠️ 만남 기록 불일치 발견!`)
+    console.warn(`  ${p1.name}의 기록: ${p2.name}와 만남? ${p1HasMet}`)
+    console.warn(`  ${p2.name}의 기록: ${p1.name}와 만남? ${p2HasMet}`)
+    console.warn(`  -> 양방향 기록이 일치하지 않습니다. 데이터 무결성 확인 필요`)
+  }
+  
+  return p1HasMet || p2HasMet
 }
 
 // 그룹의 균형 점수 계산 (높을수록 좋음)
@@ -176,13 +188,24 @@ export function createOptimalGroups(
     const extrovertCount = groupMembers.filter(p => p.mbti === 'extrovert').length
     const introvertCount = groupMembers.filter(p => p.mbti === 'introvert').length
     
+    // 이 그룹에서의 새로운 만남 수 미리 계산 (updateMeetingHistory 호출 전)
+    let groupNewMeetings = 0
+    for (let i = 0; i < groupMembers.length; i++) {
+      for (let j = i + 1; j < groupMembers.length; j++) {
+        if (!haveMet(groupMembers[i], groupMembers[j])) {
+          groupNewMeetings++
+        }
+      }
+    }
+    
     return {
       id: index + 1,
       members: groupMembers,
       maleCount,
       femaleCount,
       extrovertCount,
-      introvertCount
+      introvertCount,
+      newMeetingsCount: groupNewMeetings
     }
   }).filter(group => group.members.length > 0) // 빈 그룹 제거
 
@@ -191,23 +214,49 @@ export function createOptimalGroups(
   let totalGenderBalance = 0
   let totalMbtiBalance = 0
   
+  console.log('=== 배치 요약에서 새로운 만남 계산 시작 ===')
+  
+  // ID -> 이름 매핑 함수
+  const getNameById = (id: string) => {
+    const person = participants.find(p => p.id === id)
+    return person ? person.name : `Unknown(${id.slice(-4)})`
+  }
+  
   finalGroups.forEach(group => {
     const groupMembers = group.members
+    let groupNewMeetings = 0
+    
+    console.log(`그룹 ${group.id} (${groupMembers.length}명): [${groupMembers.map(m => m.name).join(', ')}]`)
     
     // 새로운 만남 계산
     for (let i = 0; i < groupMembers.length; i++) {
       for (let j = i + 1; j < groupMembers.length; j++) {
-        if (!haveMet(groupMembers[i], groupMembers[j])) {
+        const p1 = groupMembers[i]
+        const p2 = groupMembers[j]
+        const met = haveMet(p1, p2)
+        
+        // 만남 기록 상세 표시
+        const p1MetNames = (p1.metPeople || []).map(id => getNameById(id))
+        console.log(`  ${p1.name} vs ${p2.name}: 이전에 만남? ${met}`)
+        console.log(`    ${p1.name}의 만남기록: [${p1MetNames.join(', ')}]`)
+        
+        if (!met) {
           newMeetingsTotal++
+          groupNewMeetings++
+          console.log(`    -> 새로운 만남! ✨`)
         }
       }
     }
+    console.log(`  그룹 ${group.id} 새로운 만남: ${groupNewMeetings}쌍`)
     
     if (groupMembers.length > 0) {
       totalGenderBalance += 1 - Math.abs(group.maleCount - group.femaleCount) / groupMembers.length
       totalMbtiBalance += 1 - Math.abs(group.extrovertCount - group.introvertCount) / groupMembers.length
     }
   })
+  
+  console.log(`배치 요약 총 새로운 만남: ${newMeetingsTotal}쌍`)
+  console.log('=== 배치 요약 계산 완료 ===')
 
   console.log(`최종 그룹 수: ${finalGroups.length}`)
   console.log('각 그룹 크기:', finalGroups.map(g => g.members.length))
