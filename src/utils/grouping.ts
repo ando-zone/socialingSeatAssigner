@@ -6,8 +6,6 @@ export interface Participant {
   meetingsByRound: { [round: number]: string[] } // 라운드별 만남 기록
   allMetPeople: string[] // 전체 만난 사람 목록 (중복 제거)
   groupHistory: number[] // 그룹 히스토리
-  // 레거시 호환성을 위해 잠시 유지
-  metPeople?: string[]
 }
 
 export interface Group {
@@ -62,10 +60,10 @@ function updateAllMetPeople(participant: Participant): void {
   participant.allMetPeople = Array.from(allMet)
 }
 
-// 레거시 데이터 마이그레이션 함수
+// 참가자 데이터 검증 및 초기화 함수
 export function migrateParticipantData(participants: Participant[], currentRound: number = 1): Participant[] {
   return participants.map(participant => {
-    // 새로운 필드가 없다면 초기화
+    // 필수 필드가 없다면 초기화
     if (!participant.meetingsByRound) {
       participant.meetingsByRound = {}
     }
@@ -76,101 +74,11 @@ export function migrateParticipantData(participants: Participant[], currentRound
       participant.groupHistory = []
     }
     
-    // 레거시 metPeople 데이터가 있다면 이전 라운드들로 분산 (현재 라운드는 제외)
-    if (participant.metPeople && participant.metPeople.length > 0) {
-      // 이전 라운드들로 데이터 분산 (임시로 round 1에 모두 넣기)
-      if (currentRound > 1 && Object.keys(participant.meetingsByRound).length === 0) {
-        for (let round = 1; round < currentRound; round++) {
-          // 간단하게 모든 이전 만남을 가장 마지막 이전 라운드에 저장
-          if (round === currentRound - 1) {
-            participant.meetingsByRound[round] = [...participant.metPeople]
-          }
-        }
-      }
-    }
-    
-    // allMetPeople 업데이트
+    // allMetPeople 재계산 (데이터 일관성 보장)
     updateAllMetPeople(participant)
     
     return participant
   })
-}
-
-// 특정 라운드에서 두 참가자의 만남 기록 제거 (swap 시 사용)
-export function removeRoundMeeting(participant1: Participant, participant2: Participant, round: number): void {
-  // participant1의 해당 라운드에서 participant2 제거
-  if (participant1.meetingsByRound[round]) {
-    participant1.meetingsByRound[round] = participant1.meetingsByRound[round].filter(id => id !== participant2.id)
-  }
-  
-  // participant2의 해당 라운드에서 participant1 제거
-  if (participant2.meetingsByRound[round]) {
-    participant2.meetingsByRound[round] = participant2.meetingsByRound[round].filter(id => id !== participant1.id)
-  }
-  
-  // allMetPeople 업데이트
-  updateAllMetPeople(participant1)
-  updateAllMetPeople(participant2)
-}
-
-// 특정 라운드에서 두 참가자의 만남 기록 추가 (swap 시 사용)
-export function addRoundMeeting(participant1: Participant, participant2: Participant, round: number): void {
-  // 라운드 배열 초기화
-  if (!participant1.meetingsByRound[round]) participant1.meetingsByRound[round] = []
-  if (!participant2.meetingsByRound[round]) participant2.meetingsByRound[round] = []
-  
-  // participant1의 해당 라운드에 participant2 추가 (중복 방지)
-  if (!participant1.meetingsByRound[round].includes(participant2.id)) {
-    participant1.meetingsByRound[round].push(participant2.id)
-  }
-  
-  // participant2의 해당 라운드에 participant1 추가 (중복 방지)
-  if (!participant2.meetingsByRound[round].includes(participant1.id)) {
-    participant2.meetingsByRound[round].push(participant1.id)
-  }
-  
-  // allMetPeople 업데이트
-  updateAllMetPeople(participant1)
-  updateAllMetPeople(participant2)
-}
-
-// 그룹의 균형 점수 계산 (높을수록 좋음)
-function calculateGroupBalance(group: Participant[], groupNumber?: number): number {
-  if (group.length === 0) return 0
-  
-  const maleCount = group.filter(p => p.gender === 'male').length
-  const femaleCount = group.filter(p => p.gender === 'female').length
-  const extrovertCount = group.filter(p => p.mbti === 'extrovert').length
-  const introvertCount = group.filter(p => p.mbti === 'introvert').length
-  
-  // 성별 균형 점수 (0-1)
-  const genderBalance = 1 - Math.abs(maleCount - femaleCount) / group.length
-  
-  // MBTI 균형 점수 (0-1)
-  const mbtiBalance = 1 - Math.abs(extrovertCount - introvertCount) / group.length
-  
-  // 새로운 만남 점수
-  let newMeetings = 0
-  let totalPairs = 0
-  for (let i = 0; i < group.length; i++) {
-    for (let j = i + 1; j < group.length; j++) {
-      totalPairs++
-      if (!haveMet(group[i], group[j])) {
-        newMeetings++
-      }
-    }
-  }
-  const newMeetingScore = totalPairs > 0 ? newMeetings / totalPairs : 1
-  
-  // 이전 라운드 그룹 번호 회피 점수
-  let groupAvoidanceScore = 1
-  if (groupNumber !== undefined) {
-    const membersAvoidingPrevious = group.filter(p => !shouldAvoidGroupNumber(p, groupNumber)).length
-    groupAvoidanceScore = group.length > 0 ? membersAvoidingPrevious / group.length : 1
-  }
-  
-  // 가중 평균 (새로운 만남 45%, 성별 균형 35%, 그룹 번호 회피 15%, MBTI 균형 5%)
-  return newMeetingScore * 0.45 + genderBalance * 0.35 + groupAvoidanceScore * 0.15 + mbtiBalance * 0.05
 }
 
 // 참가자가 이전 라운드와 다른 그룹 번호를 가져야 하는지 확인
@@ -281,7 +189,7 @@ export function createOptimalGroups(
     let groupNewMeetings = 0
     for (let i = 0; i < groupMembers.length; i++) {
       for (let j = i + 1; j < groupMembers.length; j++) {
-        if (!haveMet(groupMembers[i], groupMembers[j])) {
+        if (!haveMet(groupMembers[i], groupMembers[j], currentRound)) {
           groupNewMeetings++
         }
       }
@@ -322,7 +230,7 @@ export function createOptimalGroups(
       for (let j = i + 1; j < groupMembers.length; j++) {
         const p1 = groupMembers[i]
         const p2 = groupMembers[j]
-        const met = haveMet(p1, p2)
+        const met = haveMet(p1, p2, currentRound)
         
         // 만남 기록 상세 표시
         const p1MetNames = p1.allMetPeople.map(id => getNameById(id))
@@ -461,9 +369,7 @@ export function updateMeetingHistory(
     ...p,
     meetingsByRound: { ...p.meetingsByRound },
     allMetPeople: [...p.allMetPeople],
-    groupHistory: [...p.groupHistory],
-    // 레거시 호환성
-    metPeople: [...(p.metPeople || [])]
+    groupHistory: [...p.groupHistory]
   }))
 
   // 각 그룹 내 참가자들의 만남 기록 업데이트
@@ -498,14 +404,6 @@ export function updateMeetingHistory(
           // allMetPeople 업데이트
           updateAllMetPeople(p1)
           updateAllMetPeople(p2)
-          
-          // 레거시 호환성을 위한 metPeople 업데이트
-          if (!p1.metPeople!.includes(p2.id)) {
-            p1.metPeople!.push(p2.id)
-          }
-          if (!p2.metPeople!.includes(p1.id)) {
-            p2.metPeople!.push(p1.id)
-          }
         }
       }
     }

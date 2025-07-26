@@ -28,9 +28,7 @@ export default function Home() {
         mbti,
         meetingsByRound: {},
         allMetPeople: [],
-        groupHistory: [],
-        // 레거시 호환성
-        metPeople: []
+        groupHistory: []
       }
       setParticipants([...participants, newParticipant])
       setName('')
@@ -188,9 +186,7 @@ export default function Home() {
           mbti,
           meetingsByRound: {},
           allMetPeople: [],
-          groupHistory: [],
-          // 레거시 호환성
-          metPeople: []
+          groupHistory: []
         })
       }
     })

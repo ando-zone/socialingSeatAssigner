@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GroupingResult, Participant } from '@/utils/grouping'
-import { removeRoundMeeting, addRoundMeeting, migrateParticipantData } from '@/utils/grouping'
+import { migrateParticipantData } from '@/utils/grouping'
 
 export default function ResultPage() {
   const router = useRouter()
@@ -81,7 +81,7 @@ export default function ResultPage() {
   }
 
   // 완전한 그룹 결과 재계산 함수
-  const recalculateGroupResult = (groups: typeof result.groups, updatedParticipants: Participant[]): GroupingResult => {
+  const recalculateGroupResult = (groups: GroupingResult['groups'], updatedParticipants: Participant[]): GroupingResult => {
     if (!result) throw new Error('Result is null')
 
     // 각 그룹의 상세 통계 재계산
@@ -175,8 +175,7 @@ export default function ResultPage() {
         [currentRound]: [...existingMemberIds] // 현재 라운드에서 기존 멤버들과 만남
       },
       allMetPeople: [...existingMemberIds], // 전체 만난 사람 목록
-      groupHistory: [groupId], // 현재 그룹을 히스토리에 추가
-      metPeople: [...existingMemberIds] // 레거시 호환성
+      groupHistory: [groupId] // 현재 그룹을 히스토리에 추가
     }
 
     // 기존 참가자들의 만남 기록도 업데이트 (새 참가자와 만났다고 추가)
@@ -200,8 +199,7 @@ export default function ResultPage() {
         return {
           ...p,
           meetingsByRound: newMeetingsByRound,
-          allMetPeople: newAllMetPeople,
-          metPeople: [...(p.metPeople || []), participant.id] // 레거시 호환성
+          allMetPeople: newAllMetPeople
         }
       }
       return p
@@ -211,7 +209,7 @@ export default function ResultPage() {
     updatedParticipants.push(participant)
 
     console.log(`새 참가자 "${participant.name}" 그룹 ${groupId}에 추가됨`)
-    console.log(`기존 멤버들과의 만남 기록:`, participant.metPeople)
+    console.log(`현재 라운드(${currentRound}) 만남 기록:`, participant.meetingsByRound[currentRound])
     console.log(`기존 멤버들에게도 새 참가자와의 만남 기록 추가됨`)
 
     // 해당 그룹에 참가자 추가 및 카운트 업데이트
