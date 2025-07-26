@@ -43,7 +43,7 @@
 
 ## 🌐 데모
 
-**🔗 라이브 데모**: [https://dohyeonan.github.io/socialingSeatAssigner/](https://dohyeonan.github.io/socialingSeatAssigner/)
+**🔗 라이브 데모**: [https://ando-zone.github.io/socialingSeatAssigner/](https://ando-zone.github.io/socialingSeatAssigner/)
 
 GitHub Pages를 통해 호스팅되는 실제 동작하는 데모를 체험해보세요!
 
@@ -56,7 +56,7 @@ GitHub Pages를 통해 호스팅되는 실제 동작하는 데모를 체험해�
 ### 설치
 ```bash
 # 저장소 클론
-git clone https://github.com/dohyeonan/socialingSeatAssigner.git
+git clone https://github.com/ando-zone/socialingSeatAssigner.git
 cd socialingSeatAssigner
 
 # 의존성 설치

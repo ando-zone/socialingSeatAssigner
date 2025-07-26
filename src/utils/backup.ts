@@ -17,6 +17,17 @@ export interface Snapshot {
 
 // 현재 모든 데이터를 BackupData 형태로 수집
 export function getCurrentData(): BackupData {
+  if (typeof window === 'undefined') {
+    return {
+      participants: [],
+      groupingResult: null,
+      currentRound: '1',
+      exitedParticipants: {},
+      timestamp: new Date().toISOString(),
+      version: '1.0'
+    }
+  }
+  
   return {
     participants: JSON.parse(localStorage.getItem('participants') || '[]'),
     groupingResult: JSON.parse(localStorage.getItem('groupingResult') || 'null'),
@@ -29,6 +40,8 @@ export function getCurrentData(): BackupData {
 
 // 스냅샷 생성
 export function createSnapshot(eventType: string, description: string): void {
+  if (typeof window === 'undefined') return
+  
   const snapshots = getSnapshots()
   const snapshot: Snapshot = {
     id: Date.now(),
@@ -51,11 +64,14 @@ export function createSnapshot(eventType: string, description: string): void {
 
 // 모든 스냅샷 조회
 export function getSnapshots(): Snapshot[] {
+  if (typeof window === 'undefined') return []
   return JSON.parse(localStorage.getItem('snapshots') || '[]')
 }
 
 // 특정 스냅샷으로 복원
 export function restoreSnapshot(snapshotId: number): boolean {
+  if (typeof window === 'undefined') return false
+  
   const snapshots = getSnapshots()
   const snapshot = snapshots.find(s => s.id === snapshotId)
   
@@ -84,6 +100,8 @@ export function restoreSnapshot(snapshotId: number): boolean {
 
 // JSON 파일로 내보내기
 export function exportToJSON(): void {
+  if (typeof window === 'undefined') return
+  
   const data = getCurrentData()
   const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')
   const filename = `모임데이터_${timestamp}.json`
@@ -101,6 +119,8 @@ export function exportToJSON(): void {
 
 // JSON 파일에서 가져오기
 export function importFromJSON(file: File): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     
@@ -153,6 +173,8 @@ export function formatDateTime(isoString: string): string {
 
 // 스냅샷 삭제 (오래된 것부터)
 export function cleanupOldSnapshots(keepCount: number = 30): void {
+  if (typeof window === 'undefined') return
+  
   const snapshots = getSnapshots()
   if (snapshots.length <= keepCount) return
   
@@ -164,6 +186,8 @@ export function cleanupOldSnapshots(keepCount: number = 30): void {
 
 // 모든 백업 데이터 삭제
 export function clearAllBackups(): void {
+  if (typeof window === 'undefined') return
+  
   localStorage.removeItem('snapshots')
   console.log('🗑️ 모든 백업 데이터 삭제 완료')
 }

@@ -20,7 +20,7 @@ export default function Home() {
   const [bulkText, setBulkText] = useState('')
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [showBackupSection, setShowBackupSection] = useState(false)
-  const [snapshots, setSnapshots] = useState(getSnapshots())
+  const [snapshots, setSnapshots] = useState<any[]>([])
 
   const addParticipant = () => {
     if (name.trim()) {
@@ -268,13 +268,22 @@ export default function Home() {
   }
 
   const refreshSnapshots = () => {
-    setSnapshots(getSnapshots())
+    if (typeof window !== 'undefined') {
+      setSnapshots(getSnapshots())
+    }
   }
 
   // 컴포넌트 마운트 시 스냅샷 목록 새로고침
   useEffect(() => {
     refreshSnapshots()
   }, [participants, currentRound])
+
+  // 클라이언트사이드에서만 스냅샷 로드
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSnapshots(getSnapshots())
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
