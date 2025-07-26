@@ -412,14 +412,26 @@ export default function ResultPage() {
   // 드롭 (swap 실행)
   const handleDrop = (targetParticipantId: string, targetGroupId: number) => {
     if (draggedParticipant) {
-      if (draggedParticipant.id !== targetParticipantId) {
-        swapParticipants(
-          draggedParticipant.id, 
-          draggedParticipant.fromGroupId,
-          targetParticipantId,
-          targetGroupId
-        )
+      // 같은 참가자인지 확인
+      if (draggedParticipant.id === targetParticipantId) {
+        setDraggedParticipant(null)
+        return
       }
+      
+      // 같은 그룹 내에서 swap 시도하는지 확인
+      if (draggedParticipant.fromGroupId === targetGroupId) {
+        setSwapMessage('❌ 같은 그룹 내에서는 자리 바꾸기가 불가능합니다.')
+        setTimeout(() => setSwapMessage(null), 3000)
+        setDraggedParticipant(null)
+        return
+      }
+      
+      swapParticipants(
+        draggedParticipant.id, 
+        draggedParticipant.fromGroupId,
+        targetParticipantId,
+        targetGroupId
+      )
       setDraggedParticipant(null)
     }
   }
