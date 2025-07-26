@@ -582,13 +582,98 @@ export default function ResultPage() {
 
               {/* 그룹 균형 표시 */}
               <div className="mb-4 p-3 bg-gray-50 rounded-md">
-                <div className="flex justify-between text-sm">
-                  <span>성별:</span>
-                  <span>남 {group.maleCount} · 여 {group.femaleCount}</span>
-                </div>
-                <div className="flex justify-between text-sm mt-1">
-                  <span>MBTI:</span>
-                  <span>외향 {group.extrovertCount} · 내향 {group.introvertCount}</span>
+                <div className="space-y-3">
+                  {/* 성별 비율 시각화 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">성별 비율</span>
+                      <span className="text-xs text-gray-500">남 {group.maleCount} · 여 {group.femaleCount}</span>
+                    </div>
+                    <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
+                      {group.maleCount > 0 && (
+                        <div 
+                          className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
+                          style={{ width: `${(group.maleCount / group.members.length) * 100}%` }}
+                        >
+                          {group.maleCount > 0 && group.members.length > 3 && (
+                            <span>{group.maleCount}</span>
+                          )}
+                        </div>
+                      )}
+                      {group.femaleCount > 0 && (
+                        <div 
+                          className="bg-pink-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
+                          style={{ width: `${(group.femaleCount / group.members.length) * 100}%` }}
+                        >
+                          {group.femaleCount > 0 && group.members.length > 3 && (
+                            <span>{group.femaleCount}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>남성 {Math.round((group.maleCount / group.members.length) * 100)}%</span>
+                      <span>여성 {Math.round((group.femaleCount / group.members.length) * 100)}%</span>
+                    </div>
+                  </div>
+
+                  {/* MBTI 비율 시각화 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">MBTI 비율</span>
+                      <span className="text-xs text-gray-500">외향 {group.extrovertCount} · 내향 {group.introvertCount}</span>
+                    </div>
+                    <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
+                      {group.extrovertCount > 0 && (
+                        <div 
+                          className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
+                          style={{ width: `${(group.extrovertCount / group.members.length) * 100}%` }}
+                        >
+                          {group.extrovertCount > 0 && group.members.length > 3 && (
+                            <span>{group.extrovertCount}</span>
+                          )}
+                        </div>
+                      )}
+                      {group.introvertCount > 0 && (
+                        <div 
+                          className="bg-purple-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
+                          style={{ width: `${(group.introvertCount / group.members.length) * 100}%` }}
+                        >
+                          {group.introvertCount > 0 && group.members.length > 3 && (
+                            <span>{group.introvertCount}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>외향형 {Math.round((group.extrovertCount / group.members.length) * 100)}%</span>
+                      <span>내향형 {Math.round((group.introvertCount / group.members.length) * 100)}%</span>
+                    </div>
+                  </div>
+
+                  {/* 균형 점수 표시 */}
+                  <div className="flex justify-between text-xs pt-2 border-t border-gray-300">
+                    <div className="flex items-center">
+                      <span className="text-gray-600 mr-1">성별 균형:</span>
+                      <span className={`font-medium ${
+                        Math.abs(group.maleCount - group.femaleCount) <= 1 ? 'text-green-600' : 
+                        Math.abs(group.maleCount - group.femaleCount) <= 2 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {Math.abs(group.maleCount - group.femaleCount) <= 1 ? '우수' : 
+                         Math.abs(group.maleCount - group.femaleCount) <= 2 ? '보통' : '개선필요'}
+                      </span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-gray-600 mr-1">MBTI 균형:</span>
+                      <span className={`font-medium ${
+                        Math.abs(group.extrovertCount - group.introvertCount) <= 1 ? 'text-green-600' : 
+                        Math.abs(group.extrovertCount - group.introvertCount) <= 2 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        {Math.abs(group.extrovertCount - group.introvertCount) <= 1 ? '우수' : 
+                         Math.abs(group.extrovertCount - group.introvertCount) <= 2 ? '보통' : '개선필요'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
