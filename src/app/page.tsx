@@ -377,105 +377,305 @@ export default function Home() {
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-semibold mb-4">참석자 추가</h2>
           
-          {/* 그룹 설정 모드 선택 */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-            <label className="block text-sm font-medium text-gray-700 mb-3">그룹 설정 방식</label>
-            <div className="flex gap-6 mb-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  value="auto"
-                  checked={groupingMode === 'auto'}
-                  onChange={(e) => setGroupingMode(e.target.value as 'auto' | 'manual')}
-                  className="mr-2"
-                />
-                <span>자동 (동일한 크기)</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  value="manual"
-                  checked={groupingMode === 'manual'}
-                  onChange={(e) => setGroupingMode(e.target.value as 'auto' | 'manual')}
-                  className="mr-2"
-                />
-                <span>수동 (개별 설정)</span>
-              </label>
+          {/* 그룹 설정 모드 선택 - 개선된 UI */}
+          <div className="mb-6">
+            <label className="block text-lg font-semibold text-gray-800 mb-4 flex items-center">
+              <span className="text-purple-500 mr-2">⚙️</span>
+              그룹 설정 방식
+            </label>
+            
+            {/* 카드 형태의 선택 버튼 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* 자동 모드 카드 */}
+              <div
+                onClick={() => setGroupingMode('auto')}
+                className={`cursor-pointer rounded-xl border-2 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg ${
+                  groupingMode === 'auto'
+                    ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-100 shadow-lg'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                }`}
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        groupingMode === 'auto' 
+                          ? 'bg-blue-500 text-white' 
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        🤖
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg text-gray-800">자동 모드</h3>
+                        <p className="text-sm text-gray-600">동일한 크기로 자동 배치</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      groupingMode === 'auto'
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-300'
+                    }`}>
+                      {groupingMode === 'auto' && (
+                        <div className="w-3 h-3 bg-white rounded-full"></div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">✅</span>
+                      <span>간편한 설정</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">⚡</span>
+                      <span>빠른 배치</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">🎯</span>
+                      <span>균등한 그룹 크기</span>
+                    </div>
+                  </div>
+                  
+                  {groupingMode === 'auto' && (
+                    <div className="mt-4 p-3 bg-white bg-opacity-60 rounded-lg">
+                      <div className="text-xs text-blue-700 font-medium">현재 설정</div>
+                      <div className="text-sm text-blue-800">
+                        그룹당 {groupSize}명 · 예상 {participants.length > 0 ? Math.ceil(participants.length / groupSize) : 0}개 그룹
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 수동 모드 카드 */}
+              <div
+                onClick={() => setGroupingMode('manual')}
+                className={`cursor-pointer rounded-xl border-2 transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg ${
+                  groupingMode === 'manual'
+                    ? 'border-purple-500 bg-gradient-to-br from-purple-50 to-pink-100 shadow-lg'
+                    : 'border-gray-200 bg-white hover:border-purple-300'
+                }`}
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        groupingMode === 'manual' 
+                          ? 'bg-purple-500 text-white' 
+                          : 'bg-gray-200 text-gray-600'
+                      }`}>
+                        🎨
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg text-gray-800">수동 모드</h3>
+                        <p className="text-sm text-gray-600">개별 그룹 크기 설정</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                      groupingMode === 'manual'
+                        ? 'border-purple-500 bg-purple-500'
+                        : 'border-gray-300'
+                    }`}>
+                      {groupingMode === 'manual' && (
+                        <div className="w-3 h-3 bg-white rounded-full"></div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">🎛️</span>
+                      <span>세밀한 조정</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">🎯</span>
+                      <span>맞춤형 그룹</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <span className="mr-2">💎</span>
+                      <span>유연한 설정</span>
+                    </div>
+                  </div>
+                  
+                  {groupingMode === 'manual' && (
+                    <div className="mt-4 p-3 bg-white bg-opacity-60 rounded-lg">
+                      <div className="text-xs text-purple-700 font-medium">현재 설정</div>
+                      <div className="text-sm text-purple-800">
+                        {numGroups}개 그룹 · 총 {getTotalCustomSize()}명 예상
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {groupingMode === 'auto' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">그룹 크기</label>
-                  <select
-                    value={groupSize}
-                    onChange={(e) => setGroupSize(Number(e.target.value))}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
-                  >
-                    <option value={3}>3명</option>
-                    <option value={4}>4명</option>
-                    <option value={5}>5명</option>
-                    <option value={6}>6명</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    예상 그룹 수: {participants.length > 0 ? Math.ceil(participants.length / groupSize) : 0}개
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">그룹 수</label>
-                  <select
-                    value={numGroups}
-                    onChange={(e) => handleNumGroupsChange(Number(e.target.value))}
-                    className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {[2, 3, 4, 5, 6, 7, 8].map(num => (
-                      <option key={num} value={num}>{num}개 그룹</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">각 그룹별 인원 수</label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {customGroupSizes.map((size, index) => (
-                      <div key={index} className="flex items-center space-x-2">
-                        <label className="text-sm text-gray-600 min-w-[60px]">그룹 {index + 1}:</label>
-                        <input
-                          type="number"
-                          min="2"
-                          max="10"
-                          value={size}
-                          onChange={(e) => handleGroupSizeChange(index, Number(e.target.value))}
-                          className="border border-gray-300 rounded-md px-2 py-1 w-16 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-gray-500">명</span>
+            {/* 세부 설정 섹션 */}
+            <div className={`p-6 rounded-xl border-2 transition-all duration-300 ${
+              groupingMode === 'auto' 
+                ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100' 
+                : 'border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100'
+            }`}>
+              {groupingMode === 'auto' ? (
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center mb-4">
+                    <span className="text-blue-500 mr-2">🤖</span>
+                    자동 모드 설정
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-gray-700">그룹 크기 선택</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[3, 4, 5, 6].map((size) => (
+                          <button
+                            key={size}
+                            onClick={() => setGroupSize(size)}
+                            className={`p-3 rounded-lg border-2 transition-all duration-200 text-center font-medium ${
+                              groupSize === size
+                                ? 'border-blue-500 bg-blue-500 text-white shadow-md'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50'
+                            }`}
+                          >
+                            <div className="text-lg">{size}명</div>
+                            <div className="text-xs opacity-75">그룹당</div>
+                          </button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      총 예상 인원: <span className="font-medium">{getTotalCustomSize()}명</span>
-                    </span>
-                    <span className="text-gray-600">
-                      현재 참가자: <span className="font-medium">{participants.length}명</span>
-                    </span>
-                    {getTotalCustomSize() < participants.length && (
-                      <span className="text-red-500 font-medium">
-                        인원 부족! ({participants.length - getTotalCustomSize()}명 더 필요)
-                      </span>
-                    )}
-                    {getTotalCustomSize() > participants.length && (
-                      <span className="text-orange-500 font-medium">
-                        여유 인원: {getTotalCustomSize() - participants.length}명
-                      </span>
-                    )}
+                    </div>
+                    
+                    <div className="bg-white bg-opacity-70 p-4 rounded-lg">
+                      <h5 className="font-medium text-gray-700 mb-2 flex items-center">
+                        <span className="mr-2">📊</span>
+                        예상 결과
+                      </h5>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">현재 참가자:</span>
+                          <span className="font-medium text-blue-700">{participants.length}명</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">예상 그룹 수:</span>
+                          <span className="font-medium text-blue-700">
+                            {participants.length > 0 ? Math.ceil(participants.length / groupSize) : 0}개
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">그룹당 인원:</span>
+                          <span className="font-medium text-blue-700">{groupSize}명</span>
+                        </div>
+                        {participants.length % groupSize !== 0 && participants.length > 0 && (
+                          <div className="mt-2 p-2 bg-orange-100 rounded text-xs text-orange-700">
+                            ⚠️ 마지막 그룹: {participants.length % groupSize}명
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="space-y-4">
+                  <h4 className="text-lg font-semibold text-gray-800 flex items-center mb-4">
+                    <span className="text-purple-500 mr-2">🎨</span>
+                    수동 모드 설정
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* 그룹 수 선택 */}
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-gray-700">그룹 수 선택</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[2, 3, 4, 5, 6, 7, 8].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => handleNumGroupsChange(num)}
+                            className={`p-2 rounded-lg border-2 transition-all duration-200 text-center font-medium ${
+                              numGroups === num
+                                ? 'border-purple-500 bg-purple-500 text-white shadow-md'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300 hover:bg-purple-50'
+                            }`}
+                          >
+                            <div className="text-sm">{num}개</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* 그룹별 인원 설정 */}
+                    <div className="space-y-3">
+                      <label className="block text-sm font-semibold text-gray-700">각 그룹 인원 수</label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {customGroupSizes.map((size, index) => (
+                          <div key={index} className="flex items-center space-x-3 bg-white bg-opacity-70 p-2 rounded-lg">
+                            <div className="flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-medium">
+                              {index + 1}
+                            </div>
+                            <span className="text-sm text-gray-600 min-w-[50px]">그룹:</span>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleGroupSizeChange(index, Math.max(2, size - 1))}
+                                className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center font-medium">{size}</span>
+                              <button
+                                onClick={() => handleGroupSizeChange(index, Math.min(10, size + 1))}
+                                className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
+                              >
+                                +
+                              </button>
+                              <span className="text-sm text-gray-500">명</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* 결과 요약 */}
+                    <div className="bg-white bg-opacity-70 p-4 rounded-lg">
+                      <h5 className="font-medium text-gray-700 mb-3 flex items-center">
+                        <span className="mr-2">📊</span>
+                        설정 요약
+                      </h5>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">현재 참가자:</span>
+                          <span className="font-medium text-purple-700">{participants.length}명</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">설정 그룹 수:</span>
+                          <span className="font-medium text-purple-700">{numGroups}개</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">총 예상 인원:</span>
+                          <span className="font-medium text-purple-700">{getTotalCustomSize()}명</span>
+                        </div>
+                        
+                        {/* 상태 표시 */}
+                        <div className="mt-3 pt-2 border-t border-gray-200">
+                          {getTotalCustomSize() === participants.length ? (
+                            <div className="flex items-center text-green-600 text-xs">
+                              <span className="mr-1">✅</span>
+                              <span>완벽한 배치!</span>
+                            </div>
+                          ) : getTotalCustomSize() < participants.length ? (
+                            <div className="flex items-center text-red-600 text-xs">
+                              <span className="mr-1">⚠️</span>
+                              <span>{participants.length - getTotalCustomSize()}명 초과</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center text-orange-600 text-xs">
+                              <span className="mr-1">💡</span>
+                              <span>{getTotalCustomSize() - participants.length}명 여유</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 현재 라운드 표시 - 개선된 UI */}
