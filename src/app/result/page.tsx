@@ -312,7 +312,7 @@ export default function ResultPage() {
       <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            {result.round - 1}라운드 그룹 배치 결과
+            {result.round}라운드 그룹 배치 결과
           </h1>
           <p className="text-gray-600">최적화된 그룹 배치가 완료되었습니다</p>
         </div>
