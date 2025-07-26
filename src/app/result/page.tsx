@@ -16,6 +16,8 @@ export default function ResultPage() {
   })
   const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)
   const [swapMessage, setSwapMessage] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'groups' | 'stats'>('groups')
+  const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
 
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
@@ -317,8 +319,38 @@ export default function ResultPage() {
           <p className="text-gray-600">최적화된 그룹 배치가 완료되었습니다</p>
         </div>
 
-        {/* 요약 통계 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        {/* 네비게이션 탭 */}
+        <div className="bg-white rounded-lg shadow-md mb-8">
+          <div className="flex border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('groups')}
+              className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
+                activeTab === 'groups'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span className="text-lg mr-2">👥</span>
+              그룹 결과
+            </button>
+            <button
+              onClick={() => setActiveTab('stats')}
+              className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
+                activeTab === 'stats'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span className="text-lg mr-2">📊</span>
+              참가자 통계
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'groups' && (
+          <>
+            {/* 요약 통계 */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-semibold mb-4">배치 요약</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
@@ -510,6 +542,170 @@ export default function ResultPage() {
             </div>
           ))}
         </div>
+
+          </>
+        )}
+
+        {activeTab === 'stats' && (
+          <div className="space-y-6">
+            {/* 참가자 통계 계산 */}
+            {(() => {
+              const participantStats = participants.map(participant => {
+                const metPeople = participant.metPeople || []
+                const totalMet = metPeople.length
+                
+                // 만난 이성 수 계산
+                const oppositeMet = metPeople.filter(metId => {
+                  const metPerson = participants.find(p => p.id === metId)
+                  return metPerson && metPerson.gender !== participant.gender
+                }).length
+                
+                return {
+                  ...participant,
+                  totalMet,
+                  oppositeMet
+                }
+              })
+
+              // 히스토그램을 위한 데이터 그룹핑
+              const totalMetCounts = participantStats.reduce((acc, p) => {
+                acc[p.totalMet] = (acc[p.totalMet] || 0) + 1
+                return acc
+              }, {} as Record<number, number>)
+
+              const oppositeMetCounts = participantStats.reduce((acc, p) => {
+                acc[p.oppositeMet] = (acc[p.oppositeMet] || 0) + 1
+                return acc
+              }, {} as Record<number, number>)
+
+              const maxTotalMet = Math.max(...participantStats.map(p => p.totalMet), 0)
+              const maxOppositeMet = Math.max(...participantStats.map(p => p.oppositeMet), 0)
+              const maxCount = Math.max(...Object.values(totalMetCounts), ...Object.values(oppositeMetCounts), 1)
+
+              return (
+                <>
+                  {/* 전체 만남 히스토그램 */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center">
+                      <span className="text-blue-500 mr-2">👥</span>
+                      전체 만남 수 분포
+                    </h3>
+                    <div className="space-y-3">
+                      {Array.from({ length: maxTotalMet + 1 }, (_, i) => i).map(count => (
+                        <div key={count} className="flex items-center">
+                          <div className="w-16 text-sm text-gray-600">{count}명:</div>
+                          <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                            <div 
+                              className="bg-blue-500 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                              style={{ width: `${((totalMetCounts[count] || 0) / maxCount) * 100}%` }}
+                            >
+                              <span className="text-white text-xs font-medium">
+                                {totalMetCounts[count] || 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 이성 만남 히스토그램 */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center">
+                      <span className="text-pink-500 mr-2">💕</span>
+                      이성 만남 수 분포
+                    </h3>
+                    <div className="space-y-3">
+                      {Array.from({ length: maxOppositeMet + 1 }, (_, i) => i).map(count => (
+                        <div key={count} className="flex items-center">
+                          <div className="w-16 text-sm text-gray-600">{count}명:</div>
+                          <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
+                            <div 
+                              className="bg-pink-500 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                              style={{ width: `${((oppositeMetCounts[count] || 0) / maxCount) * 100}%` }}
+                            >
+                              <span className="text-white text-xs font-medium">
+                                {oppositeMetCounts[count] || 0}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 개별 참가자 상세 */}
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-lg font-semibold mb-4 flex items-center">
+                      <span className="text-green-500 mr-2">👤</span>
+                      개별 참가자 상세 정보
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">참가자를 클릭하면 만난 사람들 목록을 확인할 수 있습니다.</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {participantStats.map(participant => (
+                        <div 
+                          key={participant.id}
+                          onClick={() => setSelectedParticipant(
+                            selectedParticipant === participant.id ? null : participant.id
+                          )}
+                          className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-medium text-gray-800">{participant.name}</h4>
+                            <div className="text-xs text-gray-500">
+                              {participant.gender === 'male' ? '남성' : '여성'} · {participant.mbti === 'extrovert' ? '외향' : '내향'}
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div className="text-center p-2 bg-blue-50 rounded">
+                              <div className="font-semibold text-blue-600">{participant.totalMet}</div>
+                              <div className="text-gray-600">전체 만남</div>
+                            </div>
+                            <div className="text-center p-2 bg-pink-50 rounded">
+                              <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
+                              <div className="text-gray-600">이성 만남</div>
+                            </div>
+                          </div>
+
+                          {selectedParticipant === participant.id && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <h5 className="font-medium text-gray-700 mb-2">만난 사람들:</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {(participant.metPeople || []).map(metId => {
+                                  const metPerson = participants.find(p => p.id === metId)
+                                  if (!metPerson) return null
+                                  
+                                  const isOpposite = metPerson.gender !== participant.gender
+                                  return (
+                                    <span 
+                                      key={metId}
+                                      className={`text-xs px-2 py-1 rounded-full ${
+                                        isOpposite 
+                                          ? 'bg-pink-100 text-pink-700' 
+                                          : 'bg-blue-100 text-blue-700'
+                                      }`}
+                                    >
+                                      {metPerson.name} {isOpposite ? '💕' : '👥'}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                              {participant.metPeople?.length === 0 && (
+                                <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        )}
 
         {/* 액션 버튼 */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
