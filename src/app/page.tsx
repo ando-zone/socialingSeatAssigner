@@ -421,7 +421,7 @@ export default function Home() {
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {participants.map((participant) => (
+            {participants.sort((a, b) => a.name.localeCompare(b.name, 'ko')).map((participant) => (
               <div
                 key={participant.id}
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-md"

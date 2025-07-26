@@ -831,7 +831,7 @@ export default function ResultPage() {
                     <p className="text-sm text-gray-600 mb-4">참가자를 클릭하면 만난 사람들 목록을 확인할 수 있습니다.</p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {participantStats.map(participant => (
+                      {participantStats.sort((a, b) => a.name.localeCompare(b.name, 'ko')).map(participant => (
                         <div 
                           key={participant.id}
                           onClick={() => setSelectedParticipant(
