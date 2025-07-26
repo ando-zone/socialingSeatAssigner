@@ -387,12 +387,65 @@ export default function Home() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">현재 라운드</label>
-              <div className="border border-gray-300 rounded-md px-3 py-2 bg-gray-50">
-                {currentRound}라운드
+          {/* 현재 라운드 표시 - 개선된 UI */}
+          <div className="mb-6">
+            <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="bg-white bg-opacity-20 rounded-full p-3 animate-pulse">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-blue-100">현재 진행중</h3>
+                    <div className="text-3xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
+                      {currentRound}라운드
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-blue-100 text-sm">참가자</div>
+                  <div className="text-2xl font-bold">{participants.length}명</div>
+                  {participants.length >= 2 && (
+                    <div className="inline-flex items-center mt-1 px-2 py-1 bg-green-500 bg-opacity-20 rounded-full">
+                      <div className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-ping"></div>
+                      <span className="text-xs text-green-200">배치 가능</span>
+                    </div>
+                  )}
+                </div>
               </div>
+              
+              {/* 참가자 수에 따른 예상 그룹 정보 */}
+              {participants.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white border-opacity-20">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-blue-100">
+                      {groupingMode === 'auto' 
+                        ? `예상 그룹: ${Math.ceil(participants.length / groupSize)}개 (${groupSize}명씩)`
+                        : `설정 그룹: ${numGroups}개 (총 ${getTotalCustomSize()}명)`
+                      }
+                    </span>
+                    {groupingMode === 'manual' && getTotalCustomSize() !== participants.length && (
+                      <span className={`font-medium px-2 py-1 rounded-full text-xs ${
+                        getTotalCustomSize() < participants.length 
+                          ? 'bg-red-500 bg-opacity-20 text-red-200' 
+                          : 'bg-yellow-500 bg-opacity-20 text-yellow-200'
+                      }`}>
+                        {getTotalCustomSize() < participants.length 
+                          ? `${participants.length - getTotalCustomSize()}명 초과` 
+                          : `${getTotalCustomSize() - participants.length}명 여유`
+                        }
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* 장식적 요소 - 개선된 애니메이션 */}
+              <div className="absolute top-0 right-0 -mr-2 -mt-2 w-16 h-16 bg-white bg-opacity-10 rounded-full animate-bounce"></div>
+              <div className="absolute bottom-0 left-0 -ml-2 -mb-2 w-12 h-12 bg-white bg-opacity-10 rounded-full animate-pulse"></div>
+              <div className="absolute top-1/2 right-4 w-3 h-3 bg-yellow-300 rounded-full animate-ping opacity-75"></div>
             </div>
           </div>
           
