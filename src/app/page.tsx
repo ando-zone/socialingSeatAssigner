@@ -285,12 +285,94 @@ export default function Home() {
     }
   }, [])
 
+  // 새로운 모임 시작 함수
+  const handleNewMeeting = () => {
+    const confirmMessage = `🎉 새로운 모임을 시작하시겠습니까?
+
+다음 데이터가 초기화됩니다:
+• 모든 참가자 정보
+• 그룹 히스토리
+• 만난 사람 기록
+• 현재 라운드 정보
+
+💾 백업 스냅샷은 유지됩니다.`
+
+    if (confirm(confirmMessage)) {
+      try {
+        // localStorage의 모임 관련 데이터만 삭제 (백업은 유지)
+        localStorage.removeItem('participants')
+        localStorage.removeItem('currentRound')
+        localStorage.removeItem('groupingResult')
+        localStorage.removeItem('exitedParticipants')
+        
+        // 상태 초기화
+        setParticipants([])
+        setCurrentRound(1)
+        setName('')
+        setGender('male')
+        setMbti('extrovert')
+        setGroupSize(4)
+        setGroupingMode('auto')
+        setNumGroups(3)
+        setCustomGroupSizes([4, 4, 4])
+        setBulkText('')
+        setShowBulkInput(false)
+        setShowBackupSection(false)
+        
+        alert('✅ 새로운 모임이 시작되었습니다!')
+      } catch (error) {
+        console.error('초기화 중 오류 발생:', error)
+        alert('❌ 초기화 중 오류가 발생했습니다. 페이지를 새로고침 해주세요.')
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">
-          모임 자리 배치 프로그램
-        </h1>
+        {/* 헤더 섹션 - 제목과 초기화 버튼 */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold text-gray-800">
+              모임 자리 배치 프로그램
+            </h1>
+            <div className="flex items-center space-x-4">
+              {participants.length > 0 && (
+                <div className="text-right">
+                  <div className="text-sm text-gray-600">현재 참가자</div>
+                  <div className="text-2xl font-bold text-blue-600">{participants.length}명</div>
+                </div>
+              )}
+                             <button
+                 onClick={handleNewMeeting}
+                 className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                 title="새로운 모임을 시작합니다 (백업은 유지됩니다)"
+               >
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>새로운 모임 시작</span>
+                </div>
+              </button>
+            </div>
+          </div>
+          
+          {/* 안내 문구 */}
+          {participants.length === 0 && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-blue-700 font-medium">새로운 모임을 시작하세요!</span>
+              </div>
+              <p className="text-blue-600 text-sm mt-1">
+                참가자를 추가하고 그룹을 배치하여 즐거운 모임을 만들어보세요.
+              </p>
+            </div>
+          )}
+        </div>
         
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <h2 className="text-xl font-semibold mb-4">참석자 추가</h2>
