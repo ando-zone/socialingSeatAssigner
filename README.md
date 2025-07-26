@@ -41,6 +41,12 @@
 - **Data Storage**: LocalStorage (브라우저 기반)
 - **Build Tool**: Next.js
 
+## 🌐 데모
+
+**🔗 라이브 데모**: [https://dohyeonan.github.io/socialingSeatAssigner/](https://dohyeonan.github.io/socialingSeatAssigner/)
+
+GitHub Pages를 통해 호스팅되는 실제 동작하는 데모를 체험해보세요!
+
 ## 🚀 설치 및 실행
 
 ### 필수 요구사항
@@ -50,7 +56,7 @@
 ### 설치
 ```bash
 # 저장소 클론
-git clone https://github.com/your-repo/socialingSeatAssigner.git
+git clone https://github.com/dohyeonan/socialingSeatAssigner.git
 cd socialingSeatAssigner
 
 # 의존성 설치
@@ -68,6 +74,12 @@ http://localhost:3000에서 애플리케이션에 접근할 수 있습니다.
 npm run build
 npm start
 ```
+
+### GitHub Pages 배포
+```bash
+npm run deploy
+```
+정적 사이트로 빌드되어 `out/` 폴더에 생성됩니다.
 
 ## 📖 사용법
 
