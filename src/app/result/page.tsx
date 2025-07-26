@@ -21,6 +21,8 @@ export default function ResultPage() {
   const [swapMessage, setSwapMessage] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'groups' | 'stats'>('groups')
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
+  const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
@@ -48,6 +50,18 @@ export default function ResultPage() {
       router.push('/')
     }
   }, [router])
+
+  // 모바일 환경 감지
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || 'ontouchstart' in window)
+    }
+    
+    checkIsMobile()
+    window.addEventListener('resize', checkIsMobile)
+    
+    return () => window.removeEventListener('resize', checkIsMobile)
+  }, [])
 
   // 현재 라운드 만남 계산 (새로운 구조 사용)
   const getCurrentRoundMeetings = (participantId: string): string[] => {
@@ -442,6 +456,41 @@ export default function ResultPage() {
     }
   }
 
+  // 터치/클릭 기반 swap 처리
+  const handleParticipantClick = (participantId: string, groupId: number) => {
+    if (!swapSelectedParticipant) {
+      // 첫 번째 선택
+      setSwapSelectedParticipant({ id: participantId, groupId })
+      setSwapMessage('💡 이제 바꿀 다른 참가자를 선택해주세요.')
+    } else {
+      // 두 번째 선택
+      if (swapSelectedParticipant.id === participantId) {
+        // 같은 사람을 다시 클릭한 경우 선택 취소
+        setSwapSelectedParticipant(null)
+        setSwapMessage('선택이 취소되었습니다.')
+        setTimeout(() => setSwapMessage(null), 2000)
+        return
+      }
+      
+      // 같은 그룹 내에서 swap 시도하는지 확인
+      if (swapSelectedParticipant.groupId === groupId) {
+        setSwapMessage('❌ 같은 그룹 내에서는 자리 바꾸기가 불가능합니다.')
+        setTimeout(() => setSwapMessage(null), 3000)
+        setSwapSelectedParticipant(null)
+        return
+      }
+      
+      // swap 실행
+      swapParticipants(
+        swapSelectedParticipant.id,
+        swapSelectedParticipant.groupId,
+        participantId,
+        groupId
+      )
+      setSwapSelectedParticipant(null)
+    }
+  }
+
   const getBalanceColor = (score: number) => {
     if (score >= 80) return 'text-green-600'
     if (score >= 60) return 'text-yellow-600'
@@ -548,7 +597,7 @@ export default function ResultPage() {
           </div>
         </div>
 
-        {/* 드래그 앤 드랍 안내 */}
+        {/* 위치 변경 안내 */}
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -557,11 +606,32 @@ export default function ResultPage() {
             <div className="ml-3">
               <div className="text-sm text-blue-700">
                 <p className="mb-2">
-                  <strong>위치 변경:</strong> 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.
+                  <strong>위치 변경:</strong> 
+                  {isMobile 
+                    ? ' 첫 번째 참가자를 터치하고, 바꿀 다른 참가자를 터치하면 두 사람의 위치가 바뀝니다.'
+                    : ' 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.'
+                  }
                 </p>
                 <p className="text-xs text-blue-600">
                   📝 <strong>업데이트되는 상태:</strong> 그룹 구성, 성별/MBTI 통계, 새로운 만남 수, 그룹 히스토리
                 </p>
+                {swapSelectedParticipant && (
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-orange-600">
+                      🎯 <strong>선택됨:</strong> {result?.groups.find(g => g.members.some(m => m.id === swapSelectedParticipant.id))?.members.find(m => m.id === swapSelectedParticipant.id)?.name} (그룹 {swapSelectedParticipant.groupId})
+                    </p>
+                    <button
+                      onClick={() => {
+                        setSwapSelectedParticipant(null)
+                        setSwapMessage('선택이 취소되었습니다.')
+                        setTimeout(() => setSwapMessage(null), 2000)
+                      }}
+                      className="text-xs bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded ml-2"
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -683,21 +753,32 @@ export default function ResultPage() {
                   const participantHistory = participants.find(p => p.id === member.id)
                   const previousGroups = participantHistory?.groupHistory?.slice(0, -1) || []
                   const isDragging = draggedParticipant?.id === member.id
+                  const isSelected = swapSelectedParticipant?.id === member.id
+                  const isSwapTarget = swapSelectedParticipant && swapSelectedParticipant.id !== member.id && swapSelectedParticipant.groupId !== group.id
                   
                   return (
                     <div 
                       key={member.id} 
-                      draggable
-                      onDragStart={() => handleDragStart(member.id, group.id)}
-                      onDragOver={handleDragOver}
-                      onDrop={() => handleDrop(member.id, group.id)}
+                      draggable={!isMobile}
+                      onDragStart={!isMobile ? () => handleDragStart(member.id, group.id) : undefined}
+                      onDragOver={!isMobile ? handleDragOver : undefined}
+                      onDrop={!isMobile ? () => handleDrop(member.id, group.id) : undefined}
+                      onClick={isMobile ? () => handleParticipantClick(member.id, group.id) : undefined}
                       className={`
-                        flex items-center justify-between p-2 border border-gray-200 rounded cursor-move
-                        transition-all duration-200
-                        ${isDragging ? 'opacity-50 scale-95 border-blue-400 bg-blue-50' : 'hover:border-blue-300 hover:bg-blue-50'}
-                        ${draggedParticipant && draggedParticipant.id !== member.id ? 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 shadow-md' : ''}
+                        flex items-center justify-between p-2 border border-gray-200 rounded transition-all duration-200
+                        ${isMobile ? 'cursor-pointer' : 'cursor-move'}
+                        ${isDragging ? 'opacity-50 scale-95 border-blue-400 bg-blue-50' : ''}
+                        ${isSelected ? 'border-orange-500 bg-orange-100 shadow-lg ring-2 ring-orange-300' : ''}
+                        ${isSwapTarget ? 'border-green-500 bg-green-100 hover:border-green-600 hover:bg-green-200 shadow-lg ring-2 ring-green-300' : ''}
+                        ${!isDragging && !isSelected && !isSwapTarget ? 'hover:border-blue-300 hover:bg-blue-50' : ''}
+                        ${draggedParticipant && draggedParticipant.id !== member.id && draggedParticipant.fromGroupId !== group.id ? 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 shadow-md' : ''}
                       `}
-                      title={draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : '드래그해서 다른 사람과 위치 바꾸기'}
+                      title={
+                        isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
+                        isSwapTarget ? `${member.name}과 위치 바꾸기` :
+                        isMobile ? '터치해서 선택' :
+                        draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : '드래그해서 다른 사람과 위치 바꾸기'
+                      }
                     >
                       <div>
                         <span className="font-medium">{member.name}</span>
@@ -710,12 +791,24 @@ export default function ResultPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <div className="text-orange-500 text-sm font-bold animate-pulse">
+                            ✅
+                          </div>
+                        )}
+                        {isSwapTarget && (
+                          <div className="text-green-500 text-sm font-bold animate-bounce">
+                            🔄
+                          </div>
+                        )}
                         {previousGroups.length > 0 && (
                           <div className="text-xs text-gray-400">
                             이전: {previousGroups.slice(-3).join(', ')}
                           </div>
                         )}
-                        <div className="text-gray-400 text-sm">⋮⋮</div>
+                        {!isSelected && !isSwapTarget && (
+                          <div className="text-gray-400 text-sm">⋮⋮</div>
+                        )}
                       </div>
                     </div>
                   )
