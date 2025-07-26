@@ -797,11 +797,17 @@ export default function Home() {
                     <li>성별: 남/여 또는 male/female 또는 m/f</li>
                     <li>MBTI: 외향/내향 또는 extrovert/introvert 또는 e/i</li>
                   </ul>
+                  <div className="mt-3 p-2 bg-gray-100 rounded text-xs">
+                    <strong>예시:</strong><br/>
+                    김철수<br/>
+                    이영희,여,내향<br/>
+                    박민수 남 외향
+                  </div>
                 </div>
                 <textarea
                   value={bulkText}
                   onChange={(e) => setBulkText(e.target.value)}
-                  placeholder="김철수&#10;이영희,여,내향&#10;박민수 남 외향&#10;최지은 여 내향"
+                  placeholder="여기에 참가자 정보를 입력해 주세요 (한 줄에 한 명씩)"
                   className="w-full h-32 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <div className="flex gap-2">
