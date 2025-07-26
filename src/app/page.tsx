@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createOptimalGroups, updateMeetingHistory, type Participant, type GroupingResult } from '@/utils/grouping'
+import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult } from '@/utils/grouping'
 
 export default function Home() {
   const router = useRouter()
@@ -26,8 +26,11 @@ export default function Home() {
         name: name.trim(),
         gender,
         mbti,
-        metPeople: [],
-        groupHistory: []
+        meetingsByRound: {},
+        allMetPeople: [],
+        groupHistory: [],
+        // 레거시 호환성
+        metPeople: []
       }
       setParticipants([...participants, newParticipant])
       setName('')
@@ -107,7 +110,16 @@ export default function Home() {
     const storedRound = localStorage.getItem('currentRound')
     
     if (storedParticipants) {
-      setParticipants(JSON.parse(storedParticipants))
+      const participants = JSON.parse(storedParticipants)
+      const currentRound = storedRound ? Number(storedRound) : 1
+      
+      // 데이터 마이그레이션 적용
+      const migratedParticipants = migrateParticipantData(participants, currentRound)
+      
+      setParticipants(migratedParticipants)
+      
+      // 마이그레이션된 데이터를 localStorage에 저장
+      localStorage.setItem('participants', JSON.stringify(migratedParticipants))
     }
     if (storedRound) {
       setCurrentRound(Number(storedRound))
@@ -174,8 +186,11 @@ export default function Home() {
           name,
           gender,
           mbti,
-          metPeople: [],
-          groupHistory: []
+          meetingsByRound: {},
+          allMetPeople: [],
+          groupHistory: [],
+          // 레거시 호환성
+          metPeople: []
         })
       }
     })
@@ -410,9 +425,9 @@ export default function Home() {
                     {participant.gender === 'male' ? '남성' : '여성'} · {' '}
                     {participant.mbti === 'extrovert' ? '외향형' : '내향형'}
                   </div>
-                  {participant.metPeople && participant.metPeople.length > 0 && (
+                  {participant.allMetPeople && participant.allMetPeople.length > 0 && (
                     <div className="text-xs text-blue-600">
-                      만난 사람: {participant.metPeople.length}명
+                      만난 사람: {participant.allMetPeople.length}명
                     </div>
                   )}
                   {participant.groupHistory && participant.groupHistory.length > 0 && (

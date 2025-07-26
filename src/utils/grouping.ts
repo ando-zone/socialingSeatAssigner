@@ -3,8 +3,11 @@ export interface Participant {
   name: string
   gender: 'male' | 'female'
   mbti: 'extrovert' | 'introvert'
+  meetingsByRound: { [round: number]: string[] } // 라운드별 만남 기록
+  allMetPeople: string[] // 전체 만난 사람 목록 (중복 제거)
+  groupHistory: number[] // 그룹 히스토리
+  // 레거시 호환성을 위해 잠시 유지
   metPeople?: string[]
-  groupHistory?: number[]
 }
 
 export interface Group {
@@ -29,20 +32,106 @@ export interface GroupingResult {
   }
 }
 
-// 두 참가자가 이전에 만났는지 확인 (양방향)
-function haveMet(p1: Participant, p2: Participant): boolean {
-  const p1HasMet = p1.metPeople?.includes(p2.id) || false
-  const p2HasMet = p2.metPeople?.includes(p1.id) || false
-  
-  // 디버깅을 위한 로그
-  if (p1HasMet !== p2HasMet) {
-    console.warn(`⚠️ 만남 기록 불일치 발견!`)
-    console.warn(`  ${p1.name}의 기록: ${p2.name}와 만남? ${p1HasMet}`)
-    console.warn(`  ${p2.name}의 기록: ${p1.name}와 만남? ${p2HasMet}`)
-    console.warn(`  -> 양방향 기록이 일치하지 않습니다. 데이터 무결성 확인 필요`)
+// 두 참가자가 이전에 만났는지 확인 (현재 라운드 제외)
+function haveMet(p1: Participant, p2: Participant, currentRound?: number): boolean {
+  if (currentRound === undefined) {
+    // 라운드 정보가 없으면 전체 기록 사용 (기존 동작)
+    return p1.allMetPeople.includes(p2.id)
   }
   
-  return p1HasMet || p2HasMet
+  // 현재 라운드 이전의 만남만 확인
+  const previousMeetings = new Set<string>()
+  Object.entries(p1.meetingsByRound).forEach(([round, meetings]) => {
+    if (parseInt(round) < currentRound) {
+      meetings.forEach(meetingId => previousMeetings.add(meetingId))
+    }
+  })
+  
+  return previousMeetings.has(p2.id)
+}
+
+// 유틸리티 함수: allMetPeople 배열 업데이트
+function updateAllMetPeople(participant: Participant): void {
+  const allMet = new Set<string>()
+  
+  // 모든 라운드의 만남 기록을 합치기
+  Object.values(participant.meetingsByRound).forEach(roundMeetings => {
+    roundMeetings.forEach(personId => allMet.add(personId))
+  })
+  
+  participant.allMetPeople = Array.from(allMet)
+}
+
+// 레거시 데이터 마이그레이션 함수
+export function migrateParticipantData(participants: Participant[], currentRound: number = 1): Participant[] {
+  return participants.map(participant => {
+    // 새로운 필드가 없다면 초기화
+    if (!participant.meetingsByRound) {
+      participant.meetingsByRound = {}
+    }
+    if (!participant.allMetPeople) {
+      participant.allMetPeople = []
+    }
+    if (!participant.groupHistory) {
+      participant.groupHistory = []
+    }
+    
+    // 레거시 metPeople 데이터가 있다면 이전 라운드들로 분산 (현재 라운드는 제외)
+    if (participant.metPeople && participant.metPeople.length > 0) {
+      // 이전 라운드들로 데이터 분산 (임시로 round 1에 모두 넣기)
+      if (currentRound > 1 && Object.keys(participant.meetingsByRound).length === 0) {
+        for (let round = 1; round < currentRound; round++) {
+          // 간단하게 모든 이전 만남을 가장 마지막 이전 라운드에 저장
+          if (round === currentRound - 1) {
+            participant.meetingsByRound[round] = [...participant.metPeople]
+          }
+        }
+      }
+    }
+    
+    // allMetPeople 업데이트
+    updateAllMetPeople(participant)
+    
+    return participant
+  })
+}
+
+// 특정 라운드에서 두 참가자의 만남 기록 제거 (swap 시 사용)
+export function removeRoundMeeting(participant1: Participant, participant2: Participant, round: number): void {
+  // participant1의 해당 라운드에서 participant2 제거
+  if (participant1.meetingsByRound[round]) {
+    participant1.meetingsByRound[round] = participant1.meetingsByRound[round].filter(id => id !== participant2.id)
+  }
+  
+  // participant2의 해당 라운드에서 participant1 제거
+  if (participant2.meetingsByRound[round]) {
+    participant2.meetingsByRound[round] = participant2.meetingsByRound[round].filter(id => id !== participant1.id)
+  }
+  
+  // allMetPeople 업데이트
+  updateAllMetPeople(participant1)
+  updateAllMetPeople(participant2)
+}
+
+// 특정 라운드에서 두 참가자의 만남 기록 추가 (swap 시 사용)
+export function addRoundMeeting(participant1: Participant, participant2: Participant, round: number): void {
+  // 라운드 배열 초기화
+  if (!participant1.meetingsByRound[round]) participant1.meetingsByRound[round] = []
+  if (!participant2.meetingsByRound[round]) participant2.meetingsByRound[round] = []
+  
+  // participant1의 해당 라운드에 participant2 추가 (중복 방지)
+  if (!participant1.meetingsByRound[round].includes(participant2.id)) {
+    participant1.meetingsByRound[round].push(participant2.id)
+  }
+  
+  // participant2의 해당 라운드에 participant1 추가 (중복 방지)
+  if (!participant2.meetingsByRound[round].includes(participant1.id)) {
+    participant2.meetingsByRound[round].push(participant1.id)
+  }
+  
+  // allMetPeople 업데이트
+  updateAllMetPeople(participant1)
+  updateAllMetPeople(participant2)
 }
 
 // 그룹의 균형 점수 계산 (높을수록 좋음)
@@ -86,7 +175,7 @@ function calculateGroupBalance(group: Participant[], groupNumber?: number): numb
 
 // 참가자가 이전 라운드와 다른 그룹 번호를 가져야 하는지 확인
 function shouldAvoidGroupNumber(participant: Participant, groupNumber: number): boolean {
-  const history = participant.groupHistory || []
+  const history = participant.groupHistory
   return history.length > 0 && history[history.length - 1] === groupNumber
 }
 
@@ -236,7 +325,7 @@ export function createOptimalGroups(
         const met = haveMet(p1, p2)
         
         // 만남 기록 상세 표시
-        const p1MetNames = (p1.metPeople || []).map(id => getNameById(id))
+        const p1MetNames = p1.allMetPeople.map(id => getNameById(id))
         console.log(`  ${p1.name} vs ${p2.name}: 이전에 만남? ${met}`)
         console.log(`    ${p1.name}의 만남기록: [${p1MetNames.join(', ')}]`)
         
@@ -362,7 +451,7 @@ function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[
   }
 }
 
-// 만남 히스토리 업데이트
+// 만남 히스토리 업데이트 (새로운 구조 사용)
 export function updateMeetingHistory(
   participants: Participant[], 
   groups: Group[], 
@@ -370,8 +459,11 @@ export function updateMeetingHistory(
 ): Participant[] {
   const updatedParticipants = participants.map(p => ({
     ...p,
-    metPeople: [...(p.metPeople || [])],
-    groupHistory: [...(p.groupHistory || [])]
+    meetingsByRound: { ...p.meetingsByRound },
+    allMetPeople: [...p.allMetPeople],
+    groupHistory: [...p.groupHistory],
+    // 레거시 호환성
+    metPeople: [...(p.metPeople || [])]
   }))
 
   // 각 그룹 내 참가자들의 만남 기록 업데이트
@@ -380,17 +472,34 @@ export function updateMeetingHistory(
     group.members.forEach(member => {
       const participant = updatedParticipants.find(p => p.id === member.id)
       if (participant) {
-        participant.groupHistory!.push(group.id)
+        participant.groupHistory.push(group.id)
       }
     })
 
-    // 서로 만난 기록 업데이트
+    // 서로 만난 기록 업데이트 (라운드별로 저장)
     for (let i = 0; i < group.members.length; i++) {
       for (let j = i + 1; j < group.members.length; j++) {
         const p1 = updatedParticipants.find(p => p.id === group.members[i].id)
         const p2 = updatedParticipants.find(p => p.id === group.members[j].id)
         
         if (p1 && p2) {
+          // 라운드별 만남 기록 초기화
+          if (!p1.meetingsByRound[round]) p1.meetingsByRound[round] = []
+          if (!p2.meetingsByRound[round]) p2.meetingsByRound[round] = []
+          
+          // 해당 라운드에 만남 기록 추가 (중복 방지)
+          if (!p1.meetingsByRound[round].includes(p2.id)) {
+            p1.meetingsByRound[round].push(p2.id)
+          }
+          if (!p2.meetingsByRound[round].includes(p1.id)) {
+            p2.meetingsByRound[round].push(p1.id)
+          }
+          
+          // allMetPeople 업데이트
+          updateAllMetPeople(p1)
+          updateAllMetPeople(p2)
+          
+          // 레거시 호환성을 위한 metPeople 업데이트
           if (!p1.metPeople!.includes(p2.id)) {
             p1.metPeople!.push(p2.id)
           }
