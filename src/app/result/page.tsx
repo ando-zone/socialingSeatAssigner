@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GroupingResult, Participant } from '@/utils/grouping'
 import { migrateParticipantData } from '@/utils/grouping'
+import { createSnapshot } from '@/utils/backup'
 
 export default function ResultPage() {
   const router = useRouter()
@@ -267,6 +268,9 @@ export default function ResultPage() {
     localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
     localStorage.setItem('participants', JSON.stringify(updatedParticipants))
 
+    // 참가자 추가 시 스냅샷 생성
+    createSnapshot('participant_add_result', `그룹 ${groupId}에 ${participant.name} 추가`)
+
     // 폼 초기화
     setNewParticipant({ name: '', gender: 'male', mbti: 'extrovert' })
     setShowAddForm(null)
@@ -380,7 +384,6 @@ export default function ResultPage() {
     // 완전한 그룹 결과 재계산 (모든 통계 포함)
     const fullyUpdatedResult = recalculateGroupResult(updatedGroups, updatedParticipants)
 
-
     // 상태 업데이트
     setResult(fullyUpdatedResult)
     setParticipants(updatedParticipants)
@@ -393,6 +396,9 @@ export default function ResultPage() {
     const p1Name = result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)?.name
     const p2Name = result.groups.find(g => g.id === group2Id)?.members.find(m => m.id === participant2Id)?.name
     setSwapMessage(`${p1Name} ↔ ${p2Name} 위치 변경 완료!`)
+    
+    // Swap 시 스냅샷 생성
+    createSnapshot('swap', `${p1Name} ↔ ${p2Name} 위치 변경`)
     
     // 3초 후 메시지 자동 제거
     setTimeout(() => setSwapMessage(null), 3000)

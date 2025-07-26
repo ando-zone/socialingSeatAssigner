@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult } from '@/utils/grouping'
+import { createSnapshot, exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, formatDateTime } from '@/utils/backup'
 
 export default function Home() {
   const router = useRouter()
@@ -18,6 +19,8 @@ export default function Home() {
   const [customGroupSizes, setCustomGroupSizes] = useState<number[]>([4, 4, 4])
   const [bulkText, setBulkText] = useState('')
   const [showBulkInput, setShowBulkInput] = useState(false)
+  const [showBackupSection, setShowBackupSection] = useState(false)
+  const [snapshots, setSnapshots] = useState(getSnapshots())
 
   const addParticipant = () => {
     if (name.trim()) {
@@ -32,6 +35,11 @@ export default function Home() {
       }
       setParticipants([...participants, newParticipant])
       setName('')
+      
+      // 참가자 추가 시 스냅샷 생성
+      setTimeout(() => {
+        createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
+      }, 100)
     }
   }
 
@@ -45,6 +53,9 @@ export default function Home() {
         gender: participantToRemove.gender
       }
       localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
+      
+      // 참가자 제거 시 스냅샷 생성
+      createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
     }
     
     setParticipants(participants.filter(p => p.id !== id))
@@ -96,6 +107,9 @@ export default function Home() {
     setIsLoading(true)
     
     try {
+      // 그룹 배치 전 스냅샷 생성
+      createSnapshot('round_start', `${currentRound}라운드 시작 전`)
+      
       const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
       const result = createOptimalGroups(participants, groupSizeParam, currentRound)
       const updatedParticipants = updateMeetingHistory(participants, result.groups, currentRound)
@@ -104,6 +118,12 @@ export default function Home() {
       localStorage.setItem('groupingResult', JSON.stringify(result))
       localStorage.setItem('participants', JSON.stringify(updatedParticipants))
       localStorage.setItem('currentRound', String(currentRound + 1))
+      
+      // 그룹 배치 완료 후 스냅샷 생성
+      setTimeout(() => {
+        createSnapshot('round_complete', `${currentRound}라운드 배치 완료`)
+      }, 100)
+      
       router.push('/result')
     } catch (error: any) {
       alert(error.message || '그룹 배치 중 오류가 발생했습니다.')
@@ -206,8 +226,55 @@ export default function Home() {
       setParticipants([...participants, ...newParticipants])
       setBulkText('')
       setShowBulkInput(false)
+      
+      // 벌크 추가 시 스냅샷 생성
+      setTimeout(() => {
+        createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
+      }, 100)
     }
   }
+
+  // 백업 관련 함수들
+  const handleExportData = () => {
+    exportToJSON()
+  }
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      await importFromJSON(file)
+      alert('데이터를 성공적으로 가져왔습니다!')
+      window.location.reload() // 페이지 새로고침으로 상태 반영
+    } catch (error) {
+      alert('데이터 가져오기 실패: ' + (error as Error).message)
+    }
+    
+    // 파일 input 초기화
+    event.target.value = ''
+  }
+
+  const handleRestoreSnapshot = (snapshotId: number) => {
+    if (confirm('이 시점으로 복원하시겠습니까? 현재 데이터는 백업됩니다.')) {
+      const success = restoreSnapshot(snapshotId)
+      if (success) {
+        alert('복원이 완료되었습니다!')
+        window.location.reload()
+      } else {
+        alert('복원 중 오류가 발생했습니다.')
+      }
+    }
+  }
+
+  const refreshSnapshots = () => {
+    setSnapshots(getSnapshots())
+  }
+
+  // 컴포넌트 마운트 시 스냅샷 목록 새로고침
+  useEffect(() => {
+    refreshSnapshots()
+  }, [participants, currentRound])
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -462,6 +529,98 @@ export default function Home() {
               >
                 {isLoading ? '배치 중...' : '그룹 배치하기'}
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* 백업 및 복원 섹션 */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">데이터 백업 및 복원</h2>
+            <button
+              onClick={() => setShowBackupSection(!showBackupSection)}
+              className="text-blue-500 hover:text-blue-700 text-sm"
+            >
+              {showBackupSection ? '숨기기' : '백업 메뉴 열기'}
+            </button>
+          </div>
+
+          {showBackupSection && (
+            <div className="space-y-6">
+              {/* JSON 내보내기/가져오기 */}
+              <div className="border-b border-gray-200 pb-6">
+                <h3 className="text-lg font-medium mb-3 flex items-center">
+                  <span className="text-blue-500 mr-2">💾</span>
+                  데이터 내보내기 / 가져오기
+                </h3>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleExportData}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md"
+                  >
+                    데이터 내보내기 (JSON)
+                  </button>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportData}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <button className="bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md">
+                      데이터 가져오기 (JSON)
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  💡 중요한 데이터는 정기적으로 내보내기하여 백업하세요.
+                </p>
+              </div>
+
+              {/* 스냅샷 복원 */}
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-medium flex items-center">
+                    <span className="text-orange-500 mr-2">📸</span>
+                    자동 스냅샷 복원
+                  </h3>
+                  <button
+                    onClick={refreshSnapshots}
+                    className="text-blue-500 hover:text-blue-700 text-sm"
+                  >
+                    새로고침
+                  </button>
+                </div>
+                
+                {snapshots.length === 0 ? (
+                  <p className="text-gray-500 text-sm">저장된 스냅샷이 없습니다.</p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {snapshots.slice(-10).reverse().map((snapshot) => (
+                      <div 
+                        key={snapshot.id}
+                        className="flex justify-between items-center p-3 border border-gray-200 rounded-md hover:bg-gray-50"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">{snapshot.description}</div>
+                          <div className="text-xs text-gray-500">
+                            {formatDateTime(snapshot.timestamp)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleRestoreSnapshot(snapshot.id)}
+                          className="bg-orange-500 hover:bg-orange-600 text-white text-xs py-1 px-3 rounded"
+                        >
+                          복원
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-sm text-gray-600 mt-3">
+                  💡 참가자 추가/제거, 그룹 배치, 위치 변경 시 자동으로 스냅샷이 생성됩니다.
+                </p>
+              </div>
             </div>
           )}
         </div>
