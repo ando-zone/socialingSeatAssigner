@@ -36,6 +36,17 @@ export default function Home() {
   }
 
   const removeParticipant = (id: string) => {
+    const participantToRemove = participants.find(p => p.id === id)
+    if (participantToRemove) {
+      // 이탈한 사람 정보를 localStorage에 저장
+      const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+      exitedParticipants[id] = {
+        name: participantToRemove.name,
+        gender: participantToRemove.gender
+      }
+      localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
+    }
+    
     setParticipants(participants.filter(p => p.id !== id))
   }
 

@@ -74,8 +74,7 @@ export function migrateParticipantData(participants: Participant[], currentRound
       participant.groupHistory = []
     }
     
-    // allMetPeople 재계산 (데이터 일관성 보장)
-    updateAllMetPeople(participant)
+    // allMetPeople는 result 페이지에서 실시간 계산하므로 여기서는 제거
     
     return participant
   })

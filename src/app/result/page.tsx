@@ -9,6 +9,7 @@ export default function ResultPage() {
   const router = useRouter()
   const [result, setResult] = useState<GroupingResult | null>(null)
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [exitedParticipants, setExitedParticipants] = useState<{[id: string]: {name: string, gender: 'male' | 'female'}}>({}) // 이탈한 사람들 정보
   const [showAddForm, setShowAddForm] = useState<number | null>(null) // 어느 그룹에 추가할지
   const [newParticipant, setNewParticipant] = useState({
     name: '',
@@ -23,10 +24,16 @@ export default function ResultPage() {
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
     const storedParticipants = localStorage.getItem('participants')
+    const storedExitedParticipants = localStorage.getItem('exitedParticipants')
     
     if (storedResult && storedParticipants) {
       const result = JSON.parse(storedResult)
       const participants = JSON.parse(storedParticipants)
+      
+      // 이탈한 사람들 정보 로드
+      if (storedExitedParticipants) {
+        setExitedParticipants(JSON.parse(storedExitedParticipants))
+      }
       
       // 데이터 마이그레이션 적용
       const migratedParticipants = migrateParticipantData(participants, result.round || 1)
@@ -208,9 +215,6 @@ export default function ResultPage() {
     // 새 참가자를 목록에 추가
     updatedParticipants.push(participant)
 
-    console.log(`새 참가자 "${participant.name}" 그룹 ${groupId}에 추가됨`)
-    console.log(`현재 라운드(${currentRound}) 만남 기록:`, participant.meetingsByRound[currentRound])
-    console.log(`기존 멤버들에게도 새 참가자와의 만남 기록 추가됨`)
 
     // 해당 그룹에 참가자 추가 및 카운트 업데이트
     const updatedGroups = result.groups.map(group => {
@@ -254,12 +258,6 @@ export default function ResultPage() {
     // 완전한 그룹 결과 재계산 (모든 통계 포함)
     const fullyUpdatedResult = recalculateGroupResult(updatedGroups, updatedParticipants)
 
-    console.log('=== 참가자 추가 후 전체 통계 재계산 ===')
-    console.log(`새 참가자 "${participant.name}" 추가됨`)
-    console.log(`총 새로운 만남 쌍: ${fullyUpdatedResult.summary.newMeetingsCount}쌍`)
-    console.log(`성별 균형 점수: ${fullyUpdatedResult.summary.genderBalanceScore}%`)
-    console.log(`MBTI 균형 점수: ${fullyUpdatedResult.summary.mbtiBalanceScore}%`)
-    console.log(`평균 그룹 크기: ${fullyUpdatedResult.summary.avgGroupSize.toFixed(1)}명`)
 
     // 상태 업데이트
     setResult(fullyUpdatedResult)
@@ -374,12 +372,7 @@ export default function ResultPage() {
         updatedParticipant.meetingsByRound = newMeetingsByRound
       }
       
-      // allMetPeople 재계산
-      const allMet = new Set<string>()
-      Object.values(updatedParticipant.meetingsByRound).forEach(roundMeetings => {
-        roundMeetings.forEach(personId => allMet.add(personId))
-      })
-      updatedParticipant.allMetPeople = Array.from(allMet)
+      // allMetPeople는 통계 계산 시 실시간으로 처리하므로 여기서는 업데이트하지 않음
       
       return updatedParticipant
     })
@@ -387,24 +380,6 @@ export default function ResultPage() {
     // 완전한 그룹 결과 재계산 (모든 통계 포함)
     const fullyUpdatedResult = recalculateGroupResult(updatedGroups, updatedParticipants)
 
-    console.log('=== Swap 후 전체 상태 업데이트 ===')
-    const p1Updated = updatedParticipants.find(p => p.id === participant1Id)
-    const p2Updated = updatedParticipants.find(p => p.id === participant2Id)
-    console.log(`${p1Updated?.name}의 그룹 히스토리:`, p1Updated?.groupHistory)
-    console.log(`${p1Updated?.name}의 라운드 ${currentRound} 만남:`, p1Updated?.meetingsByRound[currentRound])
-    console.log(`${p2Updated?.name}의 그룹 히스토리:`, p2Updated?.groupHistory)
-    console.log(`${p2Updated?.name}의 라운드 ${currentRound} 만남:`, p2Updated?.meetingsByRound[currentRound])
-    
-    console.log('=== 전체 배치 통계 재계산 ===')
-    console.log(`총 새로운 만남 쌍: ${fullyUpdatedResult.summary.newMeetingsCount}쌍`)
-    console.log(`성별 균형 점수: ${fullyUpdatedResult.summary.genderBalanceScore}%`)
-    console.log(`MBTI 균형 점수: ${fullyUpdatedResult.summary.mbtiBalanceScore}%`)
-    console.log(`평균 그룹 크기: ${fullyUpdatedResult.summary.avgGroupSize.toFixed(1)}명`)
-    
-    // 만남 기록에 대한 안내
-    console.log('✅ 라운드별 만남 기록이 정확히 업데이트되었습니다.')
-    console.log('✅ allMetPeople 목록도 재계산되었습니다.')
-    console.log('✅ 모든 그룹 통계와 배치 요약이 재계산되었습니다.')
 
     // 상태 업데이트
     setResult(fullyUpdatedResult)
@@ -422,7 +397,6 @@ export default function ResultPage() {
     // 3초 후 메시지 자동 제거
     setTimeout(() => setSwapMessage(null), 3000)
     
-    console.log(`✅ Swap 완료: ${participant1Id}(그룹${group1Id}) ↔ ${participant2Id}(그룹${group2Id})`)
   }
 
   // 드래그 시작
@@ -731,14 +705,34 @@ export default function ResultPage() {
                 // 현재 라운드에서 만날 사람들
                 const currentRoundMeetings = getCurrentRoundMeetings(participant.id)
                 
-                // 전체 만남 = allMetPeople 사용 (중복 제거됨)
-                const totalMet = participant.allMetPeople.length
+                // 전체 만남 = meetingsByRound에서 직접 계산 (이탈한 사람 포함)
+                const allMetIds = new Set<string>()
+                Object.values(participant.meetingsByRound).forEach(roundMeetings => {
+                  roundMeetings.forEach(personId => allMetIds.add(personId))
+                })
+                const totalMet = allMetIds.size
                 
-                // 이성 만남 계산 (중복 제거된 전체 목록 사용)
-                const oppositeMet = participant.allMetPeople.filter(metId => {
+                
+                // 이성 만남 계산 - 이탈한 사람도 포함해서 계산
+                // localStorage에서 직접 읽어서 최신 상태 보장
+                const currentExitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+                
+                const oppositeMet = Array.from(allMetIds).filter(metId => {
                   const metPerson = participants.find(p => p.id === metId)
-                  return metPerson && metPerson.gender !== participant.gender
+                  // 현재 참가자 중에 있으면 성별 비교
+                  if (metPerson) {
+                    const isOpposite = metPerson.gender !== participant.gender
+                    return isOpposite
+                  }
+                  // 이탈한 사람의 경우 저장된 정보 사용
+                  const exitedPerson = currentExitedParticipants[metId]
+                  if (exitedPerson) {
+                    const isOpposite = exitedPerson.gender !== participant.gender
+                    return isOpposite
+                  }
+                  return false
                 }).length
+                
                 
                 // 현재 라운드에서 새로 만날 사람 수 (이전에 만나지 않은 사람들만)
                 const newInCurrentRound = currentRoundMeetings.filter(meetingId => 
@@ -882,19 +876,27 @@ export default function ResultPage() {
                                   <div className="flex flex-wrap gap-2">
                                     {participant.previousMeetings.map(metId => {
                                       const metPerson = participants.find(p => p.id === metId)
-                                      if (!metPerson) return null
+                                      const exitedPerson = exitedParticipants[metId]
                                       
-                                      const isOpposite = metPerson.gender !== participant.gender
+                                      // 현재 참가자 또는 이탈한 참가자 정보가 있어야 표시
+                                      if (!metPerson && !exitedPerson) return null
+                                      
+                                      const personInfo = metPerson || exitedPerson
+                                      const isOpposite = personInfo.gender !== participant.gender
+                                      const isExited = !metPerson
+                                      
                                       return (
                                         <span 
                                           key={metId}
                                           className={`text-xs px-2 py-1 rounded-full ${
-                                            isOpposite 
-                                              ? 'bg-pink-100 text-pink-700' 
-                                              : 'bg-blue-100 text-blue-700'
+                                            isExited 
+                                              ? 'bg-gray-100 text-gray-500 opacity-75'
+                                              : isOpposite 
+                                                ? 'bg-pink-100 text-pink-700' 
+                                                : 'bg-blue-100 text-blue-700'
                                           }`}
                                         >
-                                          {metPerson.name} {isOpposite ? '💕' : '👥'}
+                                          {personInfo.name} {isExited ? '❌' : isOpposite ? '💕' : '👥'}
                                         </span>
                                       )
                                     })}
@@ -957,6 +959,7 @@ export default function ResultPage() {
               localStorage.removeItem('groupingResult')
               localStorage.removeItem('participants')
               localStorage.removeItem('currentRound')
+              localStorage.removeItem('exitedParticipants')
               router.push('/')
             }}
             className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"
