@@ -172,6 +172,9 @@ export function createOptimalGroups(
   })
   console.log(`그룹 번호 회피 성공률: ${totalParticipants > 0 ? Math.round((totalAvoidanceSuccess / totalParticipants) * 100) : 0}% (${totalAvoidanceSuccess}/${totalParticipants})`)
 
+  // 새로운 만남 최적화 (특히 새로운 이성과의 만남 우선)
+  optimizeNewMeetings(groups, participants, currentRound)
+  
   // 그룹 균형 최적화
   optimizeGroupBalance(groups, groupSizes)
 
@@ -271,6 +274,83 @@ export function createOptimalGroups(
 }
 
 // 그룹 균형 최적화 함수
+function optimizeNewMeetings(groups: Participant[][], participants: Participant[], currentRound: number) {
+  const maxIterations = 100
+  
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    let improved = false
+    
+    // 모든 그룹 쌍에 대해 새로운 만남 최적화
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const group1 = groups[i]
+        const group2 = groups[j]
+        
+        if (group1.length === 0 || group2.length === 0) continue
+        
+        // 각 그룹에서 한 명씩 교환해보면서 새로운 만남 점수 계산
+        for (let p1 = 0; p1 < group1.length; p1++) {
+          for (let p2 = 0; p2 < group2.length; p2++) {
+            const person1 = group1[p1]
+            const person2 = group2[p2]
+            
+            // 교환 전 새로운 만남 점수 계산
+            const oldScore = calculateNewMeetingScore(group1, currentRound) + 
+                           calculateNewMeetingScore(group2, currentRound)
+            
+            // 교환 시도
+            group1[p1] = person2
+            group2[p2] = person1
+            
+            // 교환 후 새로운 만남 점수 계산
+            const newScore = calculateNewMeetingScore(group1, currentRound) + 
+                           calculateNewMeetingScore(group2, currentRound)
+            
+            if (newScore > oldScore) {
+              improved = true
+              break
+            } else {
+              // 되돌리기
+              group1[p1] = person1
+              group2[p2] = person2
+            }
+          }
+          if (improved) break
+        }
+        if (improved) break
+      }
+      if (improved) break
+    }
+    
+    if (!improved) break
+  }
+}
+
+function calculateNewMeetingScore(group: Participant[], currentRound: number): number {
+  let score = 0
+  
+  for (let i = 0; i < group.length; i++) {
+    for (let j = i + 1; j < group.length; j++) {
+      const person1 = group[i]
+      const person2 = group[j]
+      
+      if (!haveMet(person1, person2, currentRound)) {
+        // 새로운 만남에 기본 점수 추가
+        let meetingScore = 10
+        
+        // 새로운 이성과의 만남에 추가 점수 (50% 보너스)
+        if (person1.gender !== person2.gender) {
+          meetingScore += 15
+        }
+        
+        score += meetingScore
+      }
+    }
+  }
+  
+  return score
+}
+
 function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[]) {
   const maxIterations = 50
   
