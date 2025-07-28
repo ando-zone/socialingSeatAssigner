@@ -1024,117 +1024,266 @@ export default function ResultPage() {
                       <span className="text-green-500 mr-2">👤</span>
                       개별 참가자 상세 정보
                     </h3>
-                    <p className="text-sm text-gray-600 mb-4">참가자를 클릭하면 만난 사람들 목록을 확인할 수 있습니다.</p>
+                    <p className="text-sm text-gray-600 mb-6">참가자를 클릭하면 만난 사람들 목록을 확인할 수 있습니다.</p>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {participantStats.sort((a, b) => a.name.localeCompare(b.name, 'ko')).map(participant => (
-                        <div 
-                          key={participant.id}
-                          onClick={() => setSelectedParticipant(
-                            selectedParticipant === participant.id ? null : participant.id
-                          )}
-                          className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <h4 className="font-medium text-gray-800">{participant.name}</h4>
-                            <div className="text-xs text-gray-500">
-                              {participant.gender === 'male' ? '남성' : '여성'} · {participant.mbti === 'extrovert' ? '외향' : '내향'}
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-2 text-sm">
-                            <div className="text-center p-2 bg-blue-50 rounded">
-                              <div className="font-semibold text-blue-600">{participant.totalMet}</div>
-                              <div className="text-gray-600">전체 만남</div>
-                            </div>
-                            <div className="text-center p-2 bg-pink-50 rounded">
-                              <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
-                              <div className="text-gray-600">이성 만남</div>
-                            </div>
-                            <div className="text-center p-2 bg-green-50 rounded">
-                              <div className="font-semibold text-green-600">{participant.newInCurrentRound}</div>
-                              <div className="text-gray-600">이번 라운드</div>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-2 text-xs text-gray-500 text-center">
-                            현재 그룹: {participant.currentGroupId || '없음'}
-                          </div>
+                    {(() => {
+                      // 남녀로 분리하고 각각 가나다 순으로 정렬
+                      const maleParticipants = participantStats
+                        .filter(p => p.gender === 'male')
+                        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+                      
+                      const femaleParticipants = participantStats
+                        .filter(p => p.gender === 'female')
+                        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
 
-                          {selectedParticipant === participant.id && (
-                            <div className="mt-4 pt-4 border-t border-gray-200">
-                              <h5 className="font-medium text-gray-700 mb-2">만난 사람들:</h5>
+                      return (
+                        <div className="space-y-8">
+                          {/* 남성 참가자 섹션 */}
+                          {maleParticipants.length > 0 && (
+                            <div>
+                              <div className="flex items-center mb-4 pb-2 border-b border-blue-200">
+                                <span className="text-blue-600 text-xl mr-3">👨</span>
+                                <h4 className="text-lg font-semibold text-blue-800">
+                                  남성 참가자 ({maleParticipants.length}명)
+                                </h4>
+                              </div>
                               
-                              {/* 이전에 만난 사람들 */}
-                              {participant.previousMeetings && participant.previousMeetings.length > 0 && (
-                                <div className="mb-3">
-                                  <h6 className="text-xs font-medium text-gray-600 mb-1">이미 만난 사람들:</h6>
-                                  <div className="flex flex-wrap gap-2">
-                                    {participant.previousMeetings.map(metId => {
-                                      const metPerson = participants.find(p => p.id === metId)
-                                      const exitedPerson = exitedParticipants[metId]
-                                      
-                                      // 현재 참가자 또는 이탈한 참가자 정보가 있어야 표시
-                                      if (!metPerson && !exitedPerson) return null
-                                      
-                                      const personInfo = metPerson || exitedPerson
-                                      const isOpposite = personInfo.gender !== participant.gender
-                                      const isExited = !metPerson
-                                      
-                                      return (
-                                        <span 
-                                          key={metId}
-                                          className={`text-xs px-2 py-1 rounded-full ${
-                                            isExited 
-                                              ? 'bg-gray-100 text-gray-500 opacity-75'
-                                              : isOpposite 
-                                                ? 'bg-pink-100 text-pink-700' 
-                                                : 'bg-blue-100 text-blue-700'
-                                          }`}
-                                        >
-                                          {personInfo.name} {isExited ? '❌' : isOpposite ? '💕' : '👥'}
-                                        </span>
-                                      )
-                                    })}
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {maleParticipants.map(participant => (
+                                  <div 
+                                    key={participant.id}
+                                    onClick={() => setSelectedParticipant(
+                                      selectedParticipant === participant.id ? null : participant.id
+                                    )}
+                                    className="border border-blue-200 rounded-lg p-4 hover:bg-blue-50 cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex justify-between items-start mb-2">
+                                      <h5 className="font-medium text-gray-800">{participant.name}</h5>
+                                      <div className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                                        남성 · {participant.mbti === 'extrovert' ? '외향' : '내향'}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-3 gap-2 text-sm">
+                                      <div className="text-center p-2 bg-blue-50 rounded">
+                                        <div className="font-semibold text-blue-600">{participant.totalMet}</div>
+                                        <div className="text-gray-600">전체 만남</div>
+                                      </div>
+                                      <div className="text-center p-2 bg-pink-50 rounded">
+                                        <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
+                                        <div className="text-gray-600">이성 만남</div>
+                                      </div>
+                                      <div className="text-center p-2 bg-green-50 rounded">
+                                        <div className="font-semibold text-green-600">{participant.newInCurrentRound}</div>
+                                        <div className="text-gray-600">이번 라운드</div>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="mt-2 text-xs text-gray-500 text-center">
+                                      현재 그룹: {participant.currentGroupId || '없음'}
+                                    </div>
+
+                                    {selectedParticipant === participant.id && (
+                                      <div className="mt-4 pt-4 border-t border-gray-200">
+                                        <h6 className="font-medium text-gray-700 mb-2">만난 사람들:</h6>
+                                        
+                                        {/* 이전에 만난 사람들 */}
+                                        {participant.previousMeetings && participant.previousMeetings.length > 0 && (
+                                          <div className="mb-3">
+                                            <div className="text-xs font-medium text-gray-600 mb-1">이미 만난 사람들:</div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {participant.previousMeetings.map(metId => {
+                                                const metPerson = participants.find(p => p.id === metId)
+                                                const exitedPerson = exitedParticipants[metId]
+                                                
+                                                // 현재 참가자 또는 이탈한 참가자 정보가 있어야 표시
+                                                if (!metPerson && !exitedPerson) return null
+                                                
+                                                const personInfo = metPerson || exitedPerson
+                                                const isOpposite = personInfo.gender !== participant.gender
+                                                const isExited = !metPerson
+                                                
+                                                return (
+                                                  <span 
+                                                    key={metId}
+                                                    className={`text-xs px-2 py-1 rounded-full ${
+                                                      isExited 
+                                                        ? 'bg-gray-100 text-gray-500 opacity-75'
+                                                        : isOpposite 
+                                                          ? 'bg-pink-100 text-pink-700' 
+                                                          : 'bg-blue-100 text-blue-700'
+                                                    }`}
+                                                  >
+                                                    {personInfo.name} {isExited ? '❌' : isOpposite ? '💕' : '👥'}
+                                                  </span>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* 현재 라운드에서 만날 사람들 */}
+                                        {participant.currentRoundMeetings && participant.currentRoundMeetings.length > 0 && (
+                                          <div>
+                                            <div className="text-xs font-medium text-green-600 mb-1">이번 라운드에서 만날 사람들:</div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {participant.currentRoundMeetings.map(meetingId => {
+                                                const meetingPerson = participants.find(p => p.id === meetingId)
+                                                if (!meetingPerson) return null
+                                                
+                                                const isOpposite = meetingPerson.gender !== participant.gender
+                                                return (
+                                                  <span 
+                                                    key={meetingId}
+                                                    className={`text-xs px-2 py-1 rounded-full border-2 border-dashed ${
+                                                      isOpposite 
+                                                        ? 'bg-pink-50 text-pink-700 border-pink-300' 
+                                                        : 'bg-blue-50 text-blue-700 border-blue-300'
+                                                    }`}
+                                                  >
+                                                    {meetingPerson.name} {isOpposite ? '💕' : '👥'} ✨
+                                                  </span>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {(!participant.previousMeetings?.length && !participant.currentRoundMeetings?.length) && (
+                                          <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              )}
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 여성 참가자 섹션 */}
+                          {femaleParticipants.length > 0 && (
+                            <div>
+                              <div className="flex items-center mb-4 pb-2 border-b border-pink-200">
+                                <span className="text-pink-600 text-xl mr-3">👩</span>
+                                <h4 className="text-lg font-semibold text-pink-800">
+                                  여성 참가자 ({femaleParticipants.length}명)
+                                </h4>
+                              </div>
                               
-                              {/* 현재 라운드에서 만날 사람들 */}
-                              {participant.currentRoundMeetings && participant.currentRoundMeetings.length > 0 && (
-                                <div>
-                                  <h6 className="text-xs font-medium text-green-600 mb-1">이번 라운드에서 만날 사람들:</h6>
-                                  <div className="flex flex-wrap gap-2">
-                                    {participant.currentRoundMeetings.map(meetingId => {
-                                      const meetingPerson = participants.find(p => p.id === meetingId)
-                                      if (!meetingPerson) return null
-                                      
-                                      const isOpposite = meetingPerson.gender !== participant.gender
-                                      return (
-                                        <span 
-                                          key={meetingId}
-                                          className={`text-xs px-2 py-1 rounded-full border-2 border-dashed ${
-                                            isOpposite 
-                                              ? 'bg-pink-50 text-pink-700 border-pink-300' 
-                                              : 'bg-blue-50 text-blue-700 border-blue-300'
-                                          }`}
-                                        >
-                                          {meetingPerson.name} {isOpposite ? '💕' : '👥'} ✨
-                                        </span>
-                                      )
-                                    })}
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {femaleParticipants.map(participant => (
+                                  <div 
+                                    key={participant.id}
+                                    onClick={() => setSelectedParticipant(
+                                      selectedParticipant === participant.id ? null : participant.id
+                                    )}
+                                    className="border border-pink-200 rounded-lg p-4 hover:bg-pink-50 cursor-pointer transition-colors"
+                                  >
+                                    <div className="flex justify-between items-start mb-2">
+                                      <h5 className="font-medium text-gray-800">{participant.name}</h5>
+                                      <div className="text-xs text-pink-600 bg-pink-100 px-2 py-1 rounded-full">
+                                        여성 · {participant.mbti === 'extrovert' ? '외향' : '내향'}
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-3 gap-2 text-sm">
+                                      <div className="text-center p-2 bg-blue-50 rounded">
+                                        <div className="font-semibold text-blue-600">{participant.totalMet}</div>
+                                        <div className="text-gray-600">전체 만남</div>
+                                      </div>
+                                      <div className="text-center p-2 bg-pink-50 rounded">
+                                        <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
+                                        <div className="text-gray-600">이성 만남</div>
+                                      </div>
+                                      <div className="text-center p-2 bg-green-50 rounded">
+                                        <div className="font-semibold text-green-600">{participant.newInCurrentRound}</div>
+                                        <div className="text-gray-600">이번 라운드</div>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="mt-2 text-xs text-gray-500 text-center">
+                                      현재 그룹: {participant.currentGroupId || '없음'}
+                                    </div>
+
+                                    {selectedParticipant === participant.id && (
+                                      <div className="mt-4 pt-4 border-t border-gray-200">
+                                        <h6 className="font-medium text-gray-700 mb-2">만난 사람들:</h6>
+                                        
+                                        {/* 이전에 만난 사람들 */}
+                                        {participant.previousMeetings && participant.previousMeetings.length > 0 && (
+                                          <div className="mb-3">
+                                            <div className="text-xs font-medium text-gray-600 mb-1">이미 만난 사람들:</div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {participant.previousMeetings.map(metId => {
+                                                const metPerson = participants.find(p => p.id === metId)
+                                                const exitedPerson = exitedParticipants[metId]
+                                                
+                                                // 현재 참가자 또는 이탈한 참가자 정보가 있어야 표시
+                                                if (!metPerson && !exitedPerson) return null
+                                                
+                                                const personInfo = metPerson || exitedPerson
+                                                const isOpposite = personInfo.gender !== participant.gender
+                                                const isExited = !metPerson
+                                                
+                                                return (
+                                                  <span 
+                                                    key={metId}
+                                                    className={`text-xs px-2 py-1 rounded-full ${
+                                                      isExited 
+                                                        ? 'bg-gray-100 text-gray-500 opacity-75'
+                                                        : isOpposite 
+                                                          ? 'bg-pink-100 text-pink-700' 
+                                                          : 'bg-blue-100 text-blue-700'
+                                                    }`}
+                                                  >
+                                                    {personInfo.name} {isExited ? '❌' : isOpposite ? '💕' : '👥'}
+                                                  </span>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {/* 현재 라운드에서 만날 사람들 */}
+                                        {participant.currentRoundMeetings && participant.currentRoundMeetings.length > 0 && (
+                                          <div>
+                                            <div className="text-xs font-medium text-green-600 mb-1">이번 라운드에서 만날 사람들:</div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {participant.currentRoundMeetings.map(meetingId => {
+                                                const meetingPerson = participants.find(p => p.id === meetingId)
+                                                if (!meetingPerson) return null
+                                                
+                                                const isOpposite = meetingPerson.gender !== participant.gender
+                                                return (
+                                                  <span 
+                                                    key={meetingId}
+                                                    className={`text-xs px-2 py-1 rounded-full border-2 border-dashed ${
+                                                      isOpposite 
+                                                        ? 'bg-pink-50 text-pink-700 border-pink-300' 
+                                                        : 'bg-blue-50 text-blue-700 border-blue-300'
+                                                    }`}
+                                                  >
+                                                    {meetingPerson.name} {isOpposite ? '💕' : '👥'} ✨
+                                                  </span>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {(!participant.previousMeetings?.length && !participant.currentRoundMeetings?.length) && (
+                                          <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              )}
-                              
-                              {(!participant.previousMeetings?.length && !participant.currentRoundMeetings?.length) && (
-                                <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
-                              )}
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
+                      )
+                    })()}
                   </div>
                 </>
               )
