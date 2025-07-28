@@ -619,7 +619,7 @@ export default function Home() {
                               </button>
                               <span className="w-8 text-center font-medium">{size}</span>
                               <button
-                                onClick={() => handleGroupSizeChange(index, Math.min(10, size + 1))}
+                                onClick={() => handleGroupSizeChange(index, Math.min(20, size + 1))}
                                 className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
                               >
                                 +
