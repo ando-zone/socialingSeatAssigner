@@ -1,0 +1,113 @@
+/* 인쇄용 스타일 */
+@media print {
+  /* 전체 페이지 설정 */
+  @page {
+    size: A4 landscape;
+    margin: 15mm;
+  }
+
+  body {
+    font-family: 'Arial', sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 불필요한 요소 숨기기 */
+  nav,
+  header,
+  .no-print,
+  button:not(.print-button),
+  .bg-gray-100,
+  .shadow-lg,
+  .border-2 {
+    display: none !important;
+  }
+
+  /* 좌석 배치도 최적화 */
+  .seating-chart-container {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    page-break-inside: avoid;
+  }
+
+  .seating-chart-container svg {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+  }
+
+  /* 테이블별 상세 정보 인쇄 최적화 */
+  .table-details-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
+    page-break-inside: avoid;
+  }
+
+  /* 텍스트 크기 조정 */
+  h1, h2, h3 {
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+
+  h1 {
+    font-size: 24px !important;
+    margin-bottom: 20px !important;
+  }
+
+  h2 {
+    font-size: 18px !important;
+    margin-bottom: 15px !important;
+  }
+
+  h3 {
+    font-size: 14px !important;
+    margin-bottom: 10px !important;
+  }
+
+  /* 색상 보정 */
+  .bg-blue-500,
+  .bg-blue-600 {
+    background-color: #3B82F6 !important;
+  }
+
+  .bg-pink-500,
+  .bg-pink-600 {
+    background-color: #EC4899 !important;
+  }
+
+  .bg-white {
+    background-color: #ffffff !important;
+  }
+
+  .text-white {
+    color: #ffffff !important;
+  }
+
+  .text-gray-800 {
+    color: #1f2937 !important;
+  }
+
+  .text-gray-700 {
+    color: #374151 !important;
+  }
+
+  /* 페이지 구분 */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* 그림자 및 테두리 제거 */
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl {
+    box-shadow: none !important;
+  }
+
+  .rounded-lg,
+  .rounded-md {
+    border-radius: 4px !important;
+  }
+}

@@ -6,9 +6,7 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  // GitHub Pages를 위한 basePath 설정 (repository 이름에 맞게 수정)
-  basePath: process.env.NODE_ENV === 'production' ? '/socialingSeatAssigner' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/socialingSeatAssigner/' : '',
+  // 사용자 정의 도메인(seatassigner.shop) 사용 시 basePath와 assetPrefix 불필요
 }
 
 export default nextConfig

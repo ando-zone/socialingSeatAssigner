@@ -1,4 +1,5 @@
 import './globals.css'
+import '../styles/print.css'
 
 export const metadata = {
   title: '모임 자리 배치 프로그램',
