@@ -1321,6 +1321,7 @@ export default function ResultPage() {
               localStorage.removeItem('participants')
               localStorage.removeItem('currentRound')
               localStorage.removeItem('exitedParticipants')
+              localStorage.removeItem('groupSettings')
               router.push('/')
             }}
             className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"

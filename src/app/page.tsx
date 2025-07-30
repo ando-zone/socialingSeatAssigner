@@ -21,6 +21,7 @@ export default function Home() {
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [showBackupSection, setShowBackupSection] = useState(false)
   const [snapshots, setSnapshots] = useState<any[]>([])
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   const addParticipant = () => {
     if (name.trim()) {
@@ -137,6 +138,7 @@ export default function Home() {
   useEffect(() => {
     const storedParticipants = localStorage.getItem('participants')
     const storedRound = localStorage.getItem('currentRound')
+    const storedGroupSettings = localStorage.getItem('groupSettings')
     
     if (storedParticipants) {
       const participants = JSON.parse(storedParticipants)
@@ -153,7 +155,40 @@ export default function Home() {
     if (storedRound) {
       setCurrentRound(Number(storedRound))
     }
+    
+    // 그룹 설정 복원
+    if (storedGroupSettings) {
+      try {
+        const groupSettings = JSON.parse(storedGroupSettings)
+        console.log('저장된 그룹 설정 복원:', groupSettings)
+        if (groupSettings.groupingMode) setGroupingMode(groupSettings.groupingMode)
+        if (groupSettings.groupSize) setGroupSize(groupSettings.groupSize)
+        if (groupSettings.numGroups) setNumGroups(groupSettings.numGroups)
+        if (groupSettings.customGroupSizes) setCustomGroupSizes(groupSettings.customGroupSizes)
+      } catch (error) {
+        console.error('그룹 설정 복원 중 오류:', error)
+      }
+    } else {
+      console.log('저장된 그룹 설정이 없습니다.')
+    }
+    
+    // 초기 로드 완료 표시
+    setIsInitialLoad(false)
   }, [])
+
+  // 그룹 설정 변경 시 localStorage에 저장 (초기 로드 후에만)
+  useEffect(() => {
+    if (!isInitialLoad) {
+      const groupSettings = {
+        groupingMode,
+        groupSize,
+        numGroups,
+        customGroupSizes
+      }
+      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
+      console.log('그룹 설정 저장됨:', groupSettings)
+    }
+  }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
 
   const processBulkInput = () => {
     if (!bulkText.trim()) return
@@ -304,6 +339,7 @@ export default function Home() {
         localStorage.removeItem('currentRound')
         localStorage.removeItem('groupingResult')
         localStorage.removeItem('exitedParticipants')
+        localStorage.removeItem('groupSettings')
         
         // 상태 초기화
         setParticipants([])
@@ -318,6 +354,12 @@ export default function Home() {
         setBulkText('')
         setShowBulkInput(false)
         setShowBackupSection(false)
+        setIsInitialLoad(true)
+        
+        // 초기화 완료 후 저장 가능하도록 설정
+        setTimeout(() => {
+          setIsInitialLoad(false)
+        }, 100)
         
         alert('✅ 새로운 모임이 시작되었습니다!')
       } catch (error) {

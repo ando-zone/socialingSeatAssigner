@@ -3,6 +3,7 @@ export interface BackupData {
   groupingResult: any
   currentRound: string | null
   exitedParticipants: { [id: string]: { name: string, gender: 'male' | 'female' } }
+  groupSettings: any
   timestamp: string
   version: string
 }
@@ -23,6 +24,7 @@ export function getCurrentData(): BackupData {
       groupingResult: null,
       currentRound: '1',
       exitedParticipants: {},
+      groupSettings: null,
       timestamp: new Date().toISOString(),
       version: '1.0'
     }
@@ -33,6 +35,7 @@ export function getCurrentData(): BackupData {
     groupingResult: JSON.parse(localStorage.getItem('groupingResult') || 'null'),
     currentRound: localStorage.getItem('currentRound'),
     exitedParticipants: JSON.parse(localStorage.getItem('exitedParticipants') || '{}'),
+    groupSettings: JSON.parse(localStorage.getItem('groupSettings') || 'null'),
     timestamp: new Date().toISOString(),
     version: '1.0'
   }
@@ -89,6 +92,9 @@ export function restoreSnapshot(snapshotId: number): boolean {
     localStorage.setItem('groupingResult', JSON.stringify(snapshot.data.groupingResult))
     localStorage.setItem('currentRound', snapshot.data.currentRound || '1')
     localStorage.setItem('exitedParticipants', JSON.stringify(snapshot.data.exitedParticipants))
+    if (snapshot.data.groupSettings) {
+      localStorage.setItem('groupSettings', JSON.stringify(snapshot.data.groupSettings))
+    }
     
     console.log(`🔄 스냅샷 복원 완료: ${snapshot.description}`)
     return true
@@ -141,6 +147,9 @@ export function importFromJSON(file: File): Promise<boolean> {
         localStorage.setItem('groupingResult', JSON.stringify(data.groupingResult))
         localStorage.setItem('currentRound', data.currentRound || '1')
         localStorage.setItem('exitedParticipants', JSON.stringify(data.exitedParticipants || {}))
+        if (data.groupSettings) {
+          localStorage.setItem('groupSettings', JSON.stringify(data.groupSettings))
+        }
         
         console.log('📥 데이터 가져오기 완료')
         resolve(true)
