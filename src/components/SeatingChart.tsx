@@ -285,20 +285,69 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
 
       {/* 테이블별 상세 정보 */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {groups.map((group) => (
-          <div key={group.id} className="bg-gray-50 rounded-lg p-4 border">
-            <h3 className="font-semibold text-gray-800 mb-2">테이블 {group.id}</h3>
-            <div className="space-y-1">
-              {group.members.map((member, index) => (
-                <div key={member.id} className="flex items-center gap-2 text-sm">
-                  <span className={`w-3 h-3 rounded-full ${member.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'}`}></span>
-                  <span>{member.name}</span>
-                  <span className="text-gray-500">({member.mbti === 'extrovert' ? 'E' : 'I'})</span>
-                </div>
-              ))}
+        {groups.map((group) => {
+          // 남녀 분리하고 가나다순 정렬
+          const maleMembers = group.members
+            .filter(member => member.gender === 'male')
+            .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+          
+          const femaleMembers = group.members
+            .filter(member => member.gender === 'female')
+            .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+
+          return (
+            <div key={group.id} className="bg-white rounded-lg p-4 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-gray-800">테이블 {group.id}</h3>
+                <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {group.members.length}명
+                </span>
+              </div>
+              
+              <div className="space-y-3">
+                {/* 남성 섹션 */}
+                {maleMembers.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      <span className="font-medium text-blue-700 text-sm">남성 {maleMembers.length}명</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {maleMembers.map((member) => (
+                        <span 
+                          key={member.id} 
+                          className="bg-blue-50 text-blue-800 px-4 py-2 rounded-full text-base font-semibold"
+                        >
+                          {member.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 여성 섹션 */}
+                {femaleMembers.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
+                      <span className="font-medium text-pink-700 text-sm">여성 {femaleMembers.length}명</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {femaleMembers.map((member) => (
+                        <span 
+                          key={member.id} 
+                          className="bg-pink-50 text-pink-800 px-4 py-2 rounded-full text-base font-semibold"
+                        >
+                          {member.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
