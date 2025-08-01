@@ -349,6 +349,107 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
           )
         })}
       </div>
+
+      {/* 참가자 테이블 찾기 미니 시트 */}
+      <div className="mt-12 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-6 border-2 border-blue-200">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-blue-500 p-2 rounded-lg">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800">📋 참가자 테이블 찾기</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* 남성 참가자 목록 */}
+          {(() => {
+            const allMaleMembers = groups
+              .flatMap(group => 
+                group.members
+                  .filter(member => member.gender === 'male')
+                  .map(member => ({ ...member, tableId: group.id }))
+              )
+              .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+
+            return allMaleMembers.length > 0 && (
+              <div className="bg-white rounded-lg p-4 shadow-md">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                  <h3 className="text-xl font-bold text-blue-700">👨 남성 ({allMaleMembers.length}명)</h3>
+                </div>
+                <div className="space-y-2">
+                  {allMaleMembers.map((member, index) => (
+                    <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-blue-600 font-medium w-6 text-center">
+                          {index + 1}
+                        </span>
+                        <span className="text-lg font-semibold text-gray-800">
+                          {member.name}
+                        </span>
+                      </div>
+                      <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        테이블 {member.tableId}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* 여성 참가자 목록 */}
+          {(() => {
+            const allFemaleMembers = groups
+              .flatMap(group => 
+                group.members
+                  .filter(member => member.gender === 'female')
+                  .map(member => ({ ...member, tableId: group.id }))
+              )
+              .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+
+            return allFemaleMembers.length > 0 && (
+              <div className="bg-white rounded-lg p-4 shadow-md">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-4 h-4 bg-pink-500 rounded-full"></div>
+                  <h3 className="text-xl font-bold text-pink-700">👩 여성 ({allFemaleMembers.length}명)</h3>
+                </div>
+                <div className="space-y-2">
+                  {allFemaleMembers.map((member, index) => (
+                    <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-pink-50 rounded-lg hover:bg-pink-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-pink-600 font-medium w-6 text-center">
+                          {index + 1}
+                        </span>
+                        <span className="text-lg font-semibold text-gray-800">
+                          {member.name}
+                        </span>
+                      </div>
+                      <div className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                        테이블 {member.tableId}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* 사용 안내 */}
+        <div className="mt-6 p-4 bg-blue-100 bg-opacity-50 rounded-lg">
+          <div className="flex items-center gap-2 text-blue-700">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="font-medium">💡 사용법:</span>
+          </div>
+          <p className="text-blue-600 text-sm mt-1 ml-7">
+            가나다순으로 정렬되어 있어 이름으로 쉽게 찾을 수 있습니다. 각 이름 옆의 배지에서 테이블 번호를 확인하세요!
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
