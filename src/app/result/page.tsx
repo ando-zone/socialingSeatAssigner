@@ -1307,33 +1307,35 @@ export default function ResultPage() {
           </div>
         )}
 
-        {/* 액션 버튼 */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <button
-            onClick={() => router.push('/')}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-6 rounded-md"
-          >
-            다음 라운드 준비
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('groupingResult')
-              localStorage.removeItem('participants')
-              localStorage.removeItem('currentRound')
-              localStorage.removeItem('exitedParticipants')
-              localStorage.removeItem('groupSettings')
-              router.push('/')
-            }}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"
-          >
-            새로운 모임 시작
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-md"
-          >
-            결과 인쇄
-          </button>
+        {/* 액션 버튼 - 더 많은 간격 */}
+        <div className="mt-16 mb-8">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => router.push('/')}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-6 rounded-md"
+            >
+              다음 라운드 준비
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('groupingResult')
+                localStorage.removeItem('participants')
+                localStorage.removeItem('currentRound')
+                localStorage.removeItem('exitedParticipants')
+                localStorage.removeItem('groupSettings')
+                router.push('/')
+              }}
+              className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"
+            >
+              새로운 모임 시작
+            </button>
+            <button
+              onClick={() => window.print()}
+              className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-md"
+            >
+              결과 인쇄
+            </button>
+          </div>
         </div>
       </div>
     </div>
