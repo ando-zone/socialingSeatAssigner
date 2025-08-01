@@ -528,6 +528,21 @@ export default function ResultPage() {
       )}
       
       <div className="max-w-6xl mx-auto px-4">
+        {/* 홈 네비게이션 */}
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors"
+          >
+            <span className="text-lg">🏠</span>
+            <span className="font-medium">홈으로</span>
+          </button>
+          
+          <div className="text-sm text-gray-500">
+            {result.round}라운드 결과
+          </div>
+        </div>
+
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
             {result.round}라운드 그룹 배치 결과

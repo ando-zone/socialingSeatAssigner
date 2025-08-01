@@ -22,6 +22,8 @@ export default function Home() {
   const [showBackupSection, setShowBackupSection] = useState(false)
   const [snapshots, setSnapshots] = useState<any[]>([])
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [hasExistingResult, setHasExistingResult] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
   const addParticipant = () => {
     if (name.trim()) {
@@ -120,6 +122,9 @@ export default function Home() {
       localStorage.setItem('participants', JSON.stringify(updatedParticipants))
       localStorage.setItem('currentRound', String(currentRound + 1))
       
+      // 결과가 생성되었음을 표시
+      setHasExistingResult(true)
+      
       // 그룹 배치 완료 후 스냅샷 생성
       setTimeout(() => {
         createSnapshot('round_complete', `${currentRound}라운드 배치 완료`)
@@ -136,9 +141,19 @@ export default function Home() {
 
   // 페이지 로드 시 저장된 데이터 복원
   useEffect(() => {
+    // 클라이언트에서만 실행
+    if (typeof window === 'undefined') return
+    
+    // 클라이언트임을 표시
+    setIsClient(true)
+    
     const storedParticipants = localStorage.getItem('participants')
     const storedRound = localStorage.getItem('currentRound')
     const storedGroupSettings = localStorage.getItem('groupSettings')
+    const storedResult = localStorage.getItem('groupingResult')
+    
+    // 기존 결과가 있는지 확인
+    setHasExistingResult(!!storedResult)
     
     if (storedParticipants) {
       const participants = JSON.parse(storedParticipants)
@@ -280,6 +295,11 @@ export default function Home() {
 
     try {
       await importFromJSON(file)
+      // 데이터 가져온 후 기존 결과 확인 (클라이언트에서만)
+      if (typeof window !== 'undefined') {
+        const storedResult = localStorage.getItem('groupingResult')
+        setHasExistingResult(!!storedResult)
+      }
       alert('데이터를 성공적으로 가져왔습니다!')
       window.location.reload() // 페이지 새로고침으로 상태 반영
     } catch (error) {
@@ -294,6 +314,11 @@ export default function Home() {
     if (confirm('이 시점으로 복원하시겠습니까? 현재 데이터는 백업됩니다.')) {
       const success = restoreSnapshot(snapshotId)
       if (success) {
+        // 복원 후 기존 결과 확인 (클라이언트에서만)
+        if (typeof window !== 'undefined') {
+          const storedResult = localStorage.getItem('groupingResult')
+          setHasExistingResult(!!storedResult)
+        }
         alert('복원이 완료되었습니다!')
         window.location.reload()
       } else {
@@ -355,6 +380,8 @@ export default function Home() {
         setShowBulkInput(false)
         setShowBackupSection(false)
         setIsInitialLoad(true)
+        setHasExistingResult(false)
+        // isClient는 그대로 유지 (이미 클라이언트에서 실행 중이므로)
         
         // 초기화 완료 후 저장 가능하도록 설정
         setTimeout(() => {
@@ -913,7 +940,7 @@ export default function Home() {
           </div>
           
           {participants.length >= 2 && (
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-3">
               <button 
                 onClick={handleGrouping}
                 disabled={isLoading}
@@ -921,6 +948,21 @@ export default function Home() {
               >
                 {isLoading ? '배치 중...' : '그룹 배치하기'}
               </button>
+              
+              {isClient && hasExistingResult && (
+                <div>
+                  <button
+                    onClick={() => router.push('/result')}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2 mx-auto"
+                  >
+                    <span className="text-lg">📊</span>
+                    <span>이전 결과 확인하기</span>
+                  </button>
+                  <p className="text-xs text-gray-500 mt-1">
+                    이전에 배치한 그룹 결과를 확인할 수 있습니다
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
