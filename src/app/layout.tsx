@@ -1,5 +1,6 @@
 import './globals.css'
 import '../styles/print.css'
+import Auth from '@/components/Auth'
 
 export const metadata = {
   title: '모임 자리 배치 프로그램',
@@ -13,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <Auth>
+          {children}
+        </Auth>
+      </body>
     </html>
   )
 }

@@ -11,6 +11,8 @@
     "deploy": "npm run build && touch out/.nojekyll"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.53.0",
     "autoprefixer": "^10.4.21",
     "next": "^15.4.4",
     "react": "19.0.0",
