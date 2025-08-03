@@ -1,4 +1,10 @@
 import type { NextConfig } from 'next'
+import { existsSync } from 'fs'
+import { join } from 'path'
+
+// CNAME 파일이 있으면 사용자 정의 도메인 사용
+const hasCustomDomain = process.env.NEXT_PUBLIC_CUSTOM_DOMAIN === 'true' || 
+                       existsSync(join(process.cwd(), 'public', 'CNAME'))
 
 const nextConfig: NextConfig = {
   output: 'export',
@@ -6,9 +12,10 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  // 사용자 정의 도메인(seatassigner.shop) 사용 시 basePath와 assetPrefix 불필요
+  
   // GitHub Pages 기본 도메인 사용 시에만 basePath 필요
-  ...(process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_CUSTOM_DOMAIN && {
+  // 사용자 정의 도메인(seatassigner.shop) 사용 시 basePath 불필요
+  ...(process.env.NODE_ENV === 'production' && !hasCustomDomain && {
     basePath: '/socialingSeatAssigner',
     assetPrefix: '/socialingSeatAssigner'
   }),
