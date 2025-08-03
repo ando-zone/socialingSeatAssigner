@@ -6,6 +6,10 @@ import { join } from 'path'
 const hasCustomDomain = process.env.NEXT_PUBLIC_CUSTOM_DOMAIN === 'true' || 
                        existsSync(join(process.cwd(), 'public', 'CNAME'))
 
+console.log('🔧 Next.js Config - Environment Variables:')
+console.log('- NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'NOT SET')
+console.log('- NEXT_PUBLIC_SUPABASE_ANON_KEY:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET')
+
 const nextConfig: NextConfig = {
   output: 'export',
   trailingSlash: true,
@@ -20,8 +24,14 @@ const nextConfig: NextConfig = {
     assetPrefix: '/socialingSeatAssigner'
   }),
   
-  // 환경변수 체크
+  // 환경변수 강제 주입 (여러 방법 시도)
   env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+  },
+  
+  // publicRuntimeConfig 추가 시도
+  publicRuntimeConfig: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   },

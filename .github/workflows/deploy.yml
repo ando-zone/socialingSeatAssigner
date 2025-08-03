@@ -27,6 +27,19 @@ jobs:
     - name: Install dependencies 📦
       run: npm ci
 
+    - name: Debug environment variables 🔍
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      run: |
+        echo "🔍 Environment Variables Debug:"
+        echo "URL exists: $([[ -n "$NEXT_PUBLIC_SUPABASE_URL" ]] && echo "YES" || echo "NO")"
+        echo "URL length: ${#NEXT_PUBLIC_SUPABASE_URL}"
+        echo "URL preview: ${NEXT_PUBLIC_SUPABASE_URL:0:30}..."
+        echo "KEY exists: $([[ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]] && echo "YES" || echo "NO")"
+        echo "KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+        echo "KEY preview: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:0:30}..."
+
     - name: Build application 🔧
       env:
         NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
