@@ -7,6 +7,20 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 // 환경변수 체크
 const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+// 디버깅: 환경변수 상태 확인
+console.log('🔍 Supabase Environment Debug:', {
+  hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+  hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  urlLength: process.env.NEXT_PUBLIC_SUPABASE_URL?.length || 0,
+  keyLength: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length || 0,
+  urlPreview: process.env.NEXT_PUBLIC_SUPABASE_URL ? 
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0, 20)}...` : 'undefined',
+  keyPreview: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 
+    `${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.substring(0, 20)}...` : 'undefined',
+  isConfigured: isSupabaseConfigured,
+  nodeEnv: process.env.NODE_ENV
+})
+
 // 클라이언트 사이드용 Supabase 클라이언트
 export const supabase = isSupabaseConfigured 
   ? createClient(supabaseUrl, supabaseAnonKey)
