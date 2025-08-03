@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: github-pages
     permissions:
       contents: read
       pages: write
@@ -39,6 +40,9 @@ jobs:
         echo "KEY exists: $([[ -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]] && echo "YES" || echo "NO")"
         echo "KEY length: ${#NEXT_PUBLIC_SUPABASE_ANON_KEY}"
         echo "KEY preview: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:0:30}..."
+        echo "🔍 Secrets availability:"
+        echo "Secret URL defined: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' }}"
+        echo "Secret KEY defined: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY != '' }}"
 
     - name: Build application 🔧
       env:
