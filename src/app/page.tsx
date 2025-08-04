@@ -478,36 +478,7 @@ export default function Home() {
     }
   }, [])
 
-  // 모임 공유 함수
-  const handleShareMeeting = async () => {
-    try {
-      const { getCurrentMeetingId } = await import('@/utils/database')
-      const meetingId = getCurrentMeetingId()
-      
-      if (!meetingId) {
-        alert('활성 모임이 없습니다.')
-        return
-      }
-      
-      const shareUrl = `${window.location.origin}?meeting=${meetingId}`
-      
-      if (navigator.share) {
-        // 네이티브 공유 API 사용 (모바일)
-        await navigator.share({
-          title: '모임 자리 배치 프로그램',
-          text: '이 모임에 참여하세요!',
-          url: shareUrl
-        })
-      } else {
-        // 클립보드 복사
-        await navigator.clipboard.writeText(shareUrl)
-        alert('📋 공유 링크가 클립보드에 복사되었습니다!')
-      }
-    } catch (error) {
-      console.error('공유 실패:', error)
-      alert('공유 링크 생성에 실패했습니다.')
-    }
-  }
+
 
   // 새로운 모임 시작 함수
   const handleNewMeeting = () => {
@@ -577,35 +548,18 @@ export default function Home() {
                 </div>
               )}
               
-              <div className="flex space-x-2">
-                {participants.length > 0 && (
-                  <button
-                    onClick={handleShareMeeting}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-                    title="이 모임을 다른 사람과 공유합니다"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-                      </svg>
-                      <span>공유</span>
-                    </div>
-                  </button>
-                )}
-                
-                <button
-                  onClick={handleNewMeeting}
-                  className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-                  title="새로운 모임을 시작합니다 (백업은 유지됩니다)"
-                >
-                  <div className="flex items-center space-x-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>새로운 모임 시작</span>
-                  </div>
-                </button>
-              </div>
+              <button
+                onClick={handleNewMeeting}
+                className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                title="새로운 모임을 시작합니다 (백업은 유지됩니다)"
+              >
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>새로운 모임 시작</span>
+                </div>
+              </button>
             </div>
           </div>
           
