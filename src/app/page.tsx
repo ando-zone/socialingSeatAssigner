@@ -36,18 +36,30 @@ export default function Home() {
         allMetPeople: [],
         groupHistory: []
       }
-      setParticipants([...participants, newParticipant])
+      const updatedParticipants = [...participants, newParticipant]
+      setParticipants(updatedParticipants)
       setName('')
       
       // 참가자 추가 시 스냅샷 생성
       setTimeout(async () => {
         await createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
+        
+        // DB 저장 시도
+        try {
+          const { saveParticipants } = await import('@/utils/database')
+          await saveParticipants(updatedParticipants)
+          console.log('✅ 참가자 DB 저장 성공')
+        } catch (error) {
+          console.warn('⚠️ 참가자 DB 저장 실패 (로컬은 정상):', error)
+        }
       }, 100)
     }
   }
 
   const removeParticipant = async (id: string) => {
     const participantToRemove = participants.find(p => p.id === id)
+    const updatedParticipants = participants.filter(p => p.id !== id)
+    
     if (participantToRemove) {
       // 이탈한 사람 정보를 localStorage에 저장
       const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
@@ -59,9 +71,21 @@ export default function Home() {
       
       // 참가자 제거 시 스냅샷 생성
       await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
+      
+      // DB 저장 시도
+      try {
+        const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
+        await Promise.all([
+          saveParticipants(updatedParticipants),
+          saveExitedParticipants(exitedParticipants)
+        ])
+        console.log('✅ 참가자 제거 DB 저장 성공')
+      } catch (error) {
+        console.warn('⚠️ 참가자 제거 DB 저장 실패 (로컬은 정상):', error)
+      }
     }
     
-    setParticipants(participants.filter(p => p.id !== id))
+    setParticipants(updatedParticipants)
   }
 
   // 그룹 수 변경 시 customGroupSizes 배열 크기 조정
@@ -110,6 +134,15 @@ export default function Home() {
     setIsLoading(true)
     
     try {
+      // 동적 import로 database 함수들 가져오기
+      const { 
+        getCurrentMeetingId, 
+        updateMeetingRound, 
+        saveParticipants, 
+        saveGroupingResult, 
+        saveGroupSettings 
+      } = await import('@/utils/database')
+      
       // 그룹 배치 전 스냅샷 생성
       await createSnapshot('round_start', `${currentRound}라운드 시작 전`)
       
@@ -117,10 +150,55 @@ export default function Home() {
       const result = createOptimalGroups(participants, groupSizeParam, currentRound)
       const updatedParticipants = updateMeetingHistory(participants, result.groups, currentRound)
       
-      // 결과 페이지로 이동 (상태는 결과 페이지에서 업데이트)
+      const nextRound = currentRound + 1
+      
+      // 로컬스토리지 저장
       localStorage.setItem('groupingResult', JSON.stringify(result))
       localStorage.setItem('participants', JSON.stringify(updatedParticipants))
-      localStorage.setItem('currentRound', String(currentRound + 1))
+      localStorage.setItem('currentRound', String(nextRound))
+      
+      // 그룹 설정 저장
+      const groupSettings = {
+        groupingMode,
+        groupSize,
+        numGroups,
+        customGroupSizes
+      }
+      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
+      
+      // 데이터베이스 저장 시도
+      const meetingId = getCurrentMeetingId()
+      if (meetingId) {
+        try {
+          console.log('🔄 데이터베이스 동기화 시작...')
+          
+          // 병렬로 DB 저장 실행
+          const savePromises = [
+            updateMeetingRound(meetingId, nextRound),
+            saveParticipants(updatedParticipants),
+            saveGroupingResult(result),
+            saveGroupSettings(groupSettings)
+          ]
+          
+          const results = await Promise.allSettled(savePromises)
+          
+          // 저장 결과 확인
+          results.forEach((result, index) => {
+            const operations = ['라운드 업데이트', '참가자 저장', '그룹 결과 저장', '그룹 설정 저장']
+            if (result.status === 'fulfilled' && result.value) {
+              console.log(`✅ ${operations[index]} 성공`)
+            } else {
+              console.warn(`⚠️ ${operations[index]} 실패:`, result.status === 'rejected' ? result.reason : '결과가 false')
+            }
+          })
+          
+          console.log('💾 데이터베이스 동기화 완료')
+        } catch (dbError) {
+          console.warn('⚠️ 데이터베이스 저장 중 오류 (로컬은 정상):', dbError)
+        }
+      } else {
+        console.log('ℹ️ 활성 모임이 없어 로컬스토리지만 사용')
+      }
       
       // 결과가 생성되었음을 표시
       setHasExistingResult(true)
@@ -143,6 +221,44 @@ export default function Home() {
   useEffect(() => {
     // 클라이언트에서만 실행
     if (typeof window === 'undefined') return
+    
+    // URL에서 모임 ID 확인
+    const checkUrlMeetingId = async () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search)
+        const urlMeetingId = urlParams.get('meeting')
+        
+        if (urlMeetingId) {
+          console.log('URL에서 모임 ID 감지:', urlMeetingId)
+          const { setCurrentMeetingId, getUserMeetings } = await import('@/utils/database')
+          const { createSupabaseClient } = await import('@/lib/supabase')
+          
+          const supabase = createSupabaseClient()
+          if (supabase) {
+            // 현재 사용자 확인
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+              // 해당 모임이 사용자의 모임인지 확인
+              const userMeetings = await getUserMeetings(user.id)
+              const targetMeeting = userMeetings.find(m => m.id === urlMeetingId)
+              
+              if (targetMeeting) {
+                setCurrentMeetingId(urlMeetingId)
+                console.log('✅ URL 모임으로 전환:', targetMeeting.name)
+                // URL 파라미터 제거
+                window.history.replaceState({}, '', window.location.pathname)
+              } else {
+                console.warn('⚠️ 해당 모임에 접근 권한이 없습니다:', urlMeetingId)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('URL 모임 ID 처리 실패:', error)
+      }
+    }
+    
+    checkUrlMeetingId()
     
     // 클라이언트임을 표시
     setIsClient(true)
@@ -273,13 +389,23 @@ export default function Home() {
     })
 
     if (newParticipants.length > 0) {
-      setParticipants([...participants, ...newParticipants])
+      const updatedParticipants = [...participants, ...newParticipants]
+      setParticipants(updatedParticipants)
       setBulkText('')
       setShowBulkInput(false)
       
       // 벌크 추가 시 스냅샷 생성
       setTimeout(async () => {
         await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
+        
+        // DB 저장 시도
+        try {
+          const { saveParticipants } = await import('@/utils/database')
+          await saveParticipants(updatedParticipants)
+          console.log('✅ 벌크 추가 DB 저장 성공')
+        } catch (error) {
+          console.warn('⚠️ 벌크 추가 DB 저장 실패 (로컬은 정상):', error)
+        }
       }, 100)
     }
   }
@@ -327,9 +453,16 @@ export default function Home() {
     }
   }
 
-  const refreshSnapshots = () => {
+  const refreshSnapshots = async () => {
     if (typeof window !== 'undefined') {
-      setSnapshots(getSnapshots())
+      try {
+        const allSnapshots = await getSnapshots()
+        setSnapshots(allSnapshots)
+      } catch (error) {
+        console.warn('스냅샷 조회 실패, 동기 버전 사용:', error)
+        const { getSnapshotsSync } = await import('@/utils/backup')
+        setSnapshots(getSnapshotsSync())
+      }
     }
   }
 
@@ -341,9 +474,40 @@ export default function Home() {
   // 클라이언트사이드에서만 스냅샷 로드
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setSnapshots(getSnapshots())
+      refreshSnapshots()
     }
   }, [])
+
+  // 모임 공유 함수
+  const handleShareMeeting = async () => {
+    try {
+      const { getCurrentMeetingId } = await import('@/utils/database')
+      const meetingId = getCurrentMeetingId()
+      
+      if (!meetingId) {
+        alert('활성 모임이 없습니다.')
+        return
+      }
+      
+      const shareUrl = `${window.location.origin}?meeting=${meetingId}`
+      
+      if (navigator.share) {
+        // 네이티브 공유 API 사용 (모바일)
+        await navigator.share({
+          title: '모임 자리 배치 프로그램',
+          text: '이 모임에 참여하세요!',
+          url: shareUrl
+        })
+      } else {
+        // 클립보드 복사
+        await navigator.clipboard.writeText(shareUrl)
+        alert('📋 공유 링크가 클립보드에 복사되었습니다!')
+      }
+    } catch (error) {
+      console.error('공유 실패:', error)
+      alert('공유 링크 생성에 실패했습니다.')
+    }
+  }
 
   // 새로운 모임 시작 함수
   const handleNewMeeting = () => {
@@ -412,18 +576,36 @@ export default function Home() {
                   <div className="text-2xl font-bold text-blue-600">{participants.length}명</div>
                 </div>
               )}
-                             <button
-                 onClick={handleNewMeeting}
-                 className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-                 title="새로운 모임을 시작합니다 (백업은 유지됩니다)"
-               >
-                <div className="flex items-center space-x-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <span>새로운 모임 시작</span>
-                </div>
-              </button>
+              
+              <div className="flex space-x-2">
+                {participants.length > 0 && (
+                  <button
+                    onClick={handleShareMeeting}
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-medium py-3 px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                    title="이 모임을 다른 사람과 공유합니다"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+                      </svg>
+                      <span>공유</span>
+                    </div>
+                  </button>
+                )}
+                
+                <button
+                  onClick={handleNewMeeting}
+                  className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white font-medium py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                  title="새로운 모임을 시작합니다 (백업은 유지됩니다)"
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>새로운 모임 시작</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
           

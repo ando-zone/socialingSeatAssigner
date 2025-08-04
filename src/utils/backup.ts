@@ -52,7 +52,7 @@ export async function createSnapshot(eventType: string, description: string): Pr
   const data = getCurrentData()
   
   // 로컬스토리지 저장 (기존 방식)
-  const snapshots = getSnapshots()
+  const snapshots = getSnapshotsSync()  // 동기 버전 사용
   const snapshot: Snapshot = {
     id: snapshotId,
     timestamp,
@@ -84,8 +84,44 @@ export async function createSnapshot(eventType: string, description: string): Pr
   }
 }
 
-// 모든 스냅샷 조회
-export function getSnapshots(): Snapshot[] {
+// 모든 스냅샷 조회 (로컬 + DB 통합)
+export async function getSnapshots(): Promise<Snapshot[]> {
+  if (typeof window === 'undefined') return []
+  
+  const localSnapshots = JSON.parse(localStorage.getItem('snapshots') || '[]')
+  
+  // DB 스냅샷도 가져오기 시도
+  try {
+    const { getSnapshots: getDBSnapshots } = await import('./database')
+    const dbSnapshots = await getDBSnapshots()
+    
+    // DB 스냅샷을 로컬 스냅샷 형태로 변환
+    const convertedDBSnapshots = dbSnapshots.map((dbSnapshot: any) => ({
+      id: dbSnapshot.snapshot_id,
+      timestamp: dbSnapshot.timestamp,
+      eventType: dbSnapshot.event_type,
+      description: dbSnapshot.description,
+      data: dbSnapshot.data
+    }))
+    
+    // 중복 제거하고 병합 (id 기준)
+    const allSnapshots = [...localSnapshots]
+    convertedDBSnapshots.forEach((dbSnapshot: any) => {
+      if (!allSnapshots.find(local => local.id === dbSnapshot.id)) {
+        allSnapshots.push(dbSnapshot)
+      }
+    })
+    
+    // 시간순 정렬
+    return allSnapshots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+  } catch (error) {
+    console.warn('DB 스냅샷 조회 실패, 로컬 스냅샷만 사용:', error)
+    return localSnapshots
+  }
+}
+
+// 동기 버전 (기존 호환성 유지)
+export function getSnapshotsSync(): Snapshot[] {
   if (typeof window === 'undefined') return []
   return JSON.parse(localStorage.getItem('snapshots') || '[]')
 }
@@ -94,7 +130,7 @@ export function getSnapshots(): Snapshot[] {
 export function restoreSnapshot(snapshotId: number): boolean {
   if (typeof window === 'undefined') return false
   
-  const snapshots = getSnapshots()
+  const snapshots = getSnapshotsSync()  // 동기 버전 사용
   const snapshot = snapshots.find(s => s.id === snapshotId)
   
   if (!snapshot) {
@@ -203,7 +239,7 @@ export function formatDateTime(isoString: string): string {
 export function cleanupOldSnapshots(keepCount: number = 30): void {
   if (typeof window === 'undefined') return
   
-  const snapshots = getSnapshots()
+  const snapshots = getSnapshotsSync()  // 동기 버전 사용
   if (snapshots.length <= keepCount) return
   
   const toKeep = snapshots.slice(-keepCount)
