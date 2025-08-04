@@ -6,7 +6,7 @@ yarn-error.log*
 
 # Next.js
 .next/
-# out/ - GitHub Pages를 위해 주석 처리
+out/
 
 # Environment variables
 .env
