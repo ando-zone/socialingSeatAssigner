@@ -74,6 +74,14 @@ export const getCurrentMeetingId = (): string | null => {
       currentMeetingId = stored
       return stored
     }
+    
+    // 개발 모드(Supabase 미설정)에서 임시 모임 ID 자동 생성
+    if (!isSupabaseConfigured) {
+      const tempMeetingId = `temp-meeting-${Date.now()}`
+      console.log('🔧 개발 모드: 임시 모임 ID 생성됨:', tempMeetingId)
+      setCurrentMeetingId(tempMeetingId)
+      return tempMeetingId
+    }
   }
   
   return null
@@ -216,7 +224,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
 
     if (error) throw error
 
-    return (data || []).map(p => ({
+    return (data || []).map((p: any) => ({
       id: p.id,
       name: p.name,
       gender: p.gender,
@@ -349,7 +357,7 @@ export const getExitedParticipants = async (): Promise<{[id: string]: {name: str
     if (error) throw error
 
     const result: {[id: string]: {name: string, gender: 'male' | 'female'}} = {}
-    data?.forEach(item => {
+    data?.forEach((item: any) => {
       result[item.participant_id] = {
         name: item.name,
         gender: item.gender
@@ -442,12 +450,20 @@ export const getGroupSettings = async (): Promise<{
 
 export const saveSnapshot = async (snapshotId: number, eventType: string, description: string, data: any): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()
-  if (!meetingId) return false
+  if (!meetingId) {
+    console.warn('❌ DB 스냅샷 저장 건너뜀: 활성 모임이 없습니다. 로컬스토리지만 사용.')
+    return false
+  }
   
   const supabase = createSupabaseClient()
-  if (!supabase) return false
+  if (!supabase) {
+    console.warn('❌ DB 스냅샷 저장 건너뜀: Supabase 클라이언트가 없습니다.')
+    return false
+  }
   
   try {
+    console.log('💾 DB 스냅샷 저장 시도:', { meetingId, eventType, description, snapshotId })
+    
     const { error } = await supabase
       .from('snapshots')
       .insert({
@@ -459,10 +475,15 @@ export const saveSnapshot = async (snapshotId: number, eventType: string, descri
         timestamp: new Date().toISOString()
       })
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ DB 스냅샷 저장 실패 - Supabase 에러:', error)
+      throw error
+    }
+    
+    console.log('✅ DB 스냅샷 저장 성공!')
     return true
   } catch (error) {
-    console.error('스냅샷 저장 중 오류:', error)
+    console.error('❌ DB 스냅샷 저장 중 예외 발생:', error)
     return false
   }
 }
