@@ -47,7 +47,7 @@ export function getCurrentData(): BackupData {
 export async function createSnapshot(eventType: string, description: string): Promise<void> {
   if (typeof window === 'undefined') return
   
-  const snapshotId = Date.now()
+  const snapshotId = Date.now() % 2147483647  // PostgreSQL integer 범위 내로 제한
   const timestamp = new Date().toISOString()
   const data = getCurrentData()
   
