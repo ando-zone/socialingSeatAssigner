@@ -25,7 +25,7 @@ export default function Home() {
   const [hasExistingResult, setHasExistingResult] = useState(false)
   const [isClient, setIsClient] = useState(false)
 
-  const addParticipant = () => {
+  const addParticipant = async () => {
     if (name.trim()) {
       const newParticipant: Participant = {
         id: Date.now().toString(),
@@ -40,13 +40,13 @@ export default function Home() {
       setName('')
       
       // 참가자 추가 시 스냅샷 생성
-      setTimeout(() => {
-        createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
+      setTimeout(async () => {
+        await createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
       }, 100)
     }
   }
 
-  const removeParticipant = (id: string) => {
+  const removeParticipant = async (id: string) => {
     const participantToRemove = participants.find(p => p.id === id)
     if (participantToRemove) {
       // 이탈한 사람 정보를 localStorage에 저장
@@ -58,7 +58,7 @@ export default function Home() {
       localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
       
       // 참가자 제거 시 스냅샷 생성
-      createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
+      await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
     }
     
     setParticipants(participants.filter(p => p.id !== id))
@@ -111,7 +111,7 @@ export default function Home() {
     
     try {
       // 그룹 배치 전 스냅샷 생성
-      createSnapshot('round_start', `${currentRound}라운드 시작 전`)
+      await createSnapshot('round_start', `${currentRound}라운드 시작 전`)
       
       const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
       const result = createOptimalGroups(participants, groupSizeParam, currentRound)
@@ -126,8 +126,8 @@ export default function Home() {
       setHasExistingResult(true)
       
       // 그룹 배치 완료 후 스냅샷 생성
-      setTimeout(() => {
-        createSnapshot('round_complete', `${currentRound}라운드 배치 완료`)
+      setTimeout(async () => {
+        await createSnapshot('round_complete', `${currentRound}라운드 배치 완료`)
       }, 100)
       
       router.push('/result')
@@ -205,7 +205,7 @@ export default function Home() {
     }
   }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
 
-  const processBulkInput = () => {
+  const processBulkInput = async () => {
     if (!bulkText.trim()) return
 
     const lines = bulkText.trim().split('\n')
@@ -250,7 +250,7 @@ export default function Home() {
         
         if (parts[2]) {
           const mbtiStr = parts[2].toLowerCase()
-          if (mbtiStr.includes('내향') || mbtiStr.includes('introvert') || mbtiStr.includes('i')) {
+          if (mbtiStr.includes('introvert') || mbtiStr.includes('i')) {
             mbti = 'introvert'
           }
         }
@@ -278,8 +278,8 @@ export default function Home() {
       setShowBulkInput(false)
       
       // 벌크 추가 시 스냅샷 생성
-      setTimeout(() => {
-        createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
+      setTimeout(async () => {
+        await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
       }, 100)
     }
   }

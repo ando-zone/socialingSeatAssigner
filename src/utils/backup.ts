@@ -1,3 +1,5 @@
+import { saveSnapshot as saveSnapshotToDB } from './database'
+
 export interface BackupData {
   participants: any[]
   groupingResult: any
@@ -41,17 +43,22 @@ export function getCurrentData(): BackupData {
   }
 }
 
-// 스냅샷 생성
-export function createSnapshot(eventType: string, description: string): void {
+// 스냅샷 생성 (로컬스토리지 + DB 동시 저장)
+export async function createSnapshot(eventType: string, description: string): Promise<void> {
   if (typeof window === 'undefined') return
   
+  const snapshotId = Date.now()
+  const timestamp = new Date().toISOString()
+  const data = getCurrentData()
+  
+  // 로컬스토리지 저장 (기존 방식)
   const snapshots = getSnapshots()
   const snapshot: Snapshot = {
-    id: Date.now(),
-    timestamp: new Date().toISOString(),
+    id: snapshotId,
+    timestamp,
     eventType,
     description,
-    data: getCurrentData()
+    data
   }
   
   snapshots.push(snapshot)
@@ -62,7 +69,19 @@ export function createSnapshot(eventType: string, description: string): void {
   }
   
   localStorage.setItem('snapshots', JSON.stringify(snapshots))
-  console.log(`📸 스냅샷 생성: ${description}`)
+  console.log(`📸 로컬 스냅샷 생성: ${description}`)
+  
+  // DB 저장 시도 (실패해도 로컬스토리지는 정상 저장됨)
+  try {
+    const success = await saveSnapshotToDB(snapshotId, eventType, description, data)
+    if (success) {
+      console.log(`💾 DB 스냅샷 저장 성공: ${description}`)
+    } else {
+      console.warn(`⚠️ DB 스냅샷 저장 실패 (로컬은 정상): ${description}`)
+    }
+  } catch (error) {
+    console.warn('⚠️ DB 스냅샷 저장 중 오류 (로컬은 정상):', error)
+  }
 }
 
 // 모든 스냅샷 조회
