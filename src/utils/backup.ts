@@ -51,6 +51,15 @@ export async function createSnapshot(eventType: string, description: string): Pr
   const timestamp = new Date().toISOString()
   const data = getCurrentData()
   
+  console.log(`📸 스냅샷 생성 시작:`, {
+    id: snapshotId,
+    eventType,
+    description,
+    timestamp,
+    participantCount: data.participants?.length || 0,
+    currentRound: data.currentRound
+  })
+  
   // 로컬스토리지 저장 (기존 방식)
   const snapshots = getSnapshotsSync()  // 동기 버전 사용
   const snapshot: Snapshot = {
@@ -65,22 +74,25 @@ export async function createSnapshot(eventType: string, description: string): Pr
   
   // 최대 50개 스냅샷만 유지 (더 여유있게)
   if (snapshots.length > 50) {
-    snapshots.shift()
+    const removed = snapshots.shift()
+    console.log(`🧹 오래된 스냅샷 제거:`, removed?.id)
   }
   
   localStorage.setItem('snapshots', JSON.stringify(snapshots))
-  console.log(`📸 로컬 스냅샷 생성: ${description}`)
+  console.log(`✅ 로컬 스냅샷 저장 완료: ${description} (ID: ${snapshotId})`)
+  console.log(`📊 현재 로컬 스냅샷 수: ${snapshots.length}개`)
   
   // DB 저장 시도 (실패해도 로컬스토리지는 정상 저장됨)
   try {
-    const success = await saveSnapshotToDB(snapshotId, eventType, description, data)
+    const { saveSnapshot } = await import('./database')
+    const success = await saveSnapshot(snapshotId, eventType, description, data)
     if (success) {
-      console.log(`💾 DB 스냅샷 저장 성공: ${description}`)
+      console.log(`💾 DB 스냅샷 저장 성공: ${description} (ID: ${snapshotId})`)
     } else {
-      console.warn(`⚠️ DB 스냅샷 저장 실패 (로컬은 정상): ${description}`)
+      console.warn(`⚠️ DB 스냅샷 저장 실패 (로컬은 정상): ${description} (ID: ${snapshotId})`)
     }
   } catch (error) {
-    console.warn('⚠️ DB 스냅샷 저장 중 오류 (로컬은 정상):', error)
+    console.warn(`⚠️ DB 스냅샷 저장 중 오류 (로컬은 정상): ${description} (ID: ${snapshotId})`, error)
   }
 }
 
@@ -89,11 +101,20 @@ export async function getSnapshots(): Promise<Snapshot[]> {
   if (typeof window === 'undefined') return []
   
   const localSnapshots = JSON.parse(localStorage.getItem('snapshots') || '[]')
+  console.log(`📋 로컬 스냅샷 조회: ${localSnapshots.length}개 발견`)
+  console.log(`📋 로컬 스냅샷 ID들:`, localSnapshots.map((s: any) => s.id))
   
   // DB 스냅샷도 가져오기 시도
   try {
     const { getSnapshots: getDBSnapshots } = await import('./database')
     const dbSnapshots = await getDBSnapshots()
+    
+    console.log(`💾 DB 스냅샷 조회: ${dbSnapshots.length}개 발견`)
+    console.log(`💾 DB 스냅샷 원본:`, dbSnapshots.map((s: any) => ({ 
+      uuid: s.id, 
+      snapshot_id: s.snapshot_id, 
+      description: s.description 
+    })))
     
     // DB 스냅샷을 로컬 스냅샷 형태로 변환
     const convertedDBSnapshots = dbSnapshots.map((dbSnapshot: any) => ({
@@ -104,16 +125,27 @@ export async function getSnapshots(): Promise<Snapshot[]> {
       data: dbSnapshot.data
     }))
     
+    console.log(`🔄 변환된 DB 스냅샷 ID들:`, convertedDBSnapshots.map((s: any) => s.id))
+    
     // 중복 제거하고 병합 (id 기준)
     const allSnapshots = [...localSnapshots]
+    let addedFromDB = 0
+    
     convertedDBSnapshots.forEach((dbSnapshot: any) => {
       if (!allSnapshots.find(local => local.id === dbSnapshot.id)) {
         allSnapshots.push(dbSnapshot)
+        addedFromDB++
       }
     })
     
+    console.log(`🔀 DB에서 추가된 스냅샷: ${addedFromDB}개`)
+    console.log(`📊 통합 스냅샷 총 ${allSnapshots.length}개`)
+    
     // 시간순 정렬
-    return allSnapshots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    const sortedSnapshots = allSnapshots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    console.log(`✅ 최종 스냅샷 ID들:`, sortedSnapshots.map((s: any) => s.id))
+    
+    return sortedSnapshots
   } catch (error) {
     console.warn('DB 스냅샷 조회 실패, 로컬 스냅샷만 사용:', error)
     return localSnapshots
@@ -126,19 +158,65 @@ export function getSnapshotsSync(): Snapshot[] {
   return JSON.parse(localStorage.getItem('snapshots') || '[]')
 }
 
-// 특정 스냅샷으로 복원
-export function restoreSnapshot(snapshotId: number): boolean {
+// 특정 스냅샷으로 복원 (통합 버전)
+export async function restoreSnapshot(snapshotId: number): Promise<boolean> {
   if (typeof window === 'undefined') return false
   
-  const snapshots = getSnapshotsSync()  // 동기 버전 사용
-  const snapshot = snapshots.find(s => s.id === snapshotId)
-  
-  if (!snapshot) {
-    console.error('스냅샷을 찾을 수 없습니다:', snapshotId)
-    return false
-  }
-  
   try {
+    console.log('🔍 스냅샷 복원 시작, ID:', snapshotId)
+    
+    // 통합 스냅샷 목록에서 검색
+    const allSnapshots = await getSnapshots()
+    const snapshot = allSnapshots.find(s => s.id === snapshotId)
+    
+    if (!snapshot) {
+      console.error('❌ 통합 스냅샷에서 찾을 수 없습니다:', snapshotId)
+      console.log('📋 사용 가능한 스냅샷 ID들:', allSnapshots.map(s => s.id))
+      
+      // 폴백: 로컬스토리지만 재시도
+      const localSnapshots = getSnapshotsSync()
+      const localSnapshot = localSnapshots.find(s => s.id === snapshotId)
+      
+      if (!localSnapshot) {
+        console.error('❌ 로컬 스냅샷에서도 찾을 수 없습니다:', snapshotId)
+        console.log('📋 로컬 스냅샷 ID들:', localSnapshots.map(s => s.id))
+        return false
+      }
+      
+      console.log('✅ 로컬 스냅샷에서 발견, 복원 진행')
+      return restoreSnapshotData(localSnapshot)
+    }
+    
+    console.log('✅ 통합 스냅샷에서 발견, 복원 진행')
+    return restoreSnapshotData(snapshot)
+    
+  } catch (error) {
+    console.error('❌ 스냅샷 복원 중 예외 발생:', error)
+    
+    // 에러 시 동기 버전으로 폴백
+    try {
+      const snapshots = getSnapshotsSync()
+      const snapshot = snapshots.find(s => s.id === snapshotId)
+      
+      if (!snapshot) {
+        console.error('❌ 폴백에서도 스냅샷을 찾을 수 없습니다:', snapshotId)
+        return false
+      }
+      
+      console.log('✅ 폴백으로 스냅샷 복원 시도')
+      return restoreSnapshotData(snapshot)
+    } catch (fallbackError) {
+      console.error('❌ 폴백 복원도 실패:', fallbackError)
+      return false
+    }
+  }
+}
+
+// 스냅샷 데이터 복원 헬퍼 함수
+function restoreSnapshotData(snapshot: Snapshot): boolean {
+  try {
+    console.log(`🔄 스냅샷 데이터 복원 시작: ${snapshot.description}`)
+    
     // 현재 상태를 '복원 전' 스냅샷으로 저장
     createSnapshot('restore_backup', `${formatDateTime(snapshot.timestamp)} 복원 전 백업`)
     
@@ -151,12 +229,27 @@ export function restoreSnapshot(snapshotId: number): boolean {
       localStorage.setItem('groupSettings', JSON.stringify(snapshot.data.groupSettings))
     }
     
-    console.log(`🔄 스냅샷 복원 완료: ${snapshot.description}`)
+    console.log(`✅ 스냅샷 복원 완료: ${snapshot.description}`)
     return true
   } catch (error) {
-    console.error('스냅샷 복원 중 오류:', error)
+    console.error('❌ 스냅샷 데이터 복원 중 오류:', error)
     return false
   }
+}
+
+// 동기 버전 (기존 호환성 유지)
+export function restoreSnapshotSync(snapshotId: number): boolean {
+  if (typeof window === 'undefined') return false
+  
+  const snapshots = getSnapshotsSync()
+  const snapshot = snapshots.find(s => s.id === snapshotId)
+  
+  if (!snapshot) {
+    console.error('스냅샷을 찾을 수 없습니다:', snapshotId)
+    return false
+  }
+  
+  return restoreSnapshotData(snapshot)
 }
 
 // JSON 파일로 내보내기

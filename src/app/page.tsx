@@ -436,19 +436,30 @@ export default function Home() {
     event.target.value = ''
   }
 
-  const handleRestoreSnapshot = (snapshotId: number) => {
+  const handleRestoreSnapshot = async (snapshotId: number) => {
     if (confirm('이 시점으로 복원하시겠습니까? 현재 데이터는 백업됩니다.')) {
-      const success = restoreSnapshot(snapshotId)
-      if (success) {
-        // 복원 후 기존 결과 확인 (클라이언트에서만)
-        if (typeof window !== 'undefined') {
-          const storedResult = localStorage.getItem('groupingResult')
-          setHasExistingResult(!!storedResult)
+      try {
+        console.log('🔄 스냅샷 복원 시작, ID:', snapshotId)
+        const success = await restoreSnapshot(snapshotId)
+        
+        if (success) {
+          console.log('✅ 스냅샷 복원 성공!')
+          
+          // 복원 후 기존 결과 확인 (클라이언트에서만)
+          if (typeof window !== 'undefined') {
+            const storedResult = localStorage.getItem('groupingResult')
+            setHasExistingResult(!!storedResult)
+          }
+          
+          alert('✅ 복원이 완료되었습니다!')
+          window.location.reload()
+        } else {
+          console.error('❌ 스냅샷 복원 실패')
+          alert('❌ 복원 중 오류가 발생했습니다. 콘솔을 확인해주세요.')
         }
-        alert('복원이 완료되었습니다!')
-        window.location.reload()
-      } else {
-        alert('복원 중 오류가 발생했습니다.')
+      } catch (error) {
+        console.error('❌ 스냅샷 복원 중 예외:', error)
+        alert('❌ 복원 중 오류가 발생했습니다: ' + (error as Error).message)
       }
     }
   }
