@@ -32,15 +32,32 @@ export function getCurrentData(): BackupData {
     }
   }
   
-  return {
-    participants: JSON.parse(localStorage.getItem('participants') || '[]'),
-    groupingResult: JSON.parse(localStorage.getItem('groupingResult') || 'null'),
-    currentRound: localStorage.getItem('currentRound'),
-    exitedParticipants: JSON.parse(localStorage.getItem('exitedParticipants') || '{}'),
-    groupSettings: JSON.parse(localStorage.getItem('groupSettings') || 'null'),
+  const participants = JSON.parse(localStorage.getItem('participants') || '[]')
+  const groupingResult = JSON.parse(localStorage.getItem('groupingResult') || 'null')
+  const currentRound = localStorage.getItem('currentRound')
+  const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+  const groupSettings = JSON.parse(localStorage.getItem('groupSettings') || 'null')
+  
+  const data = {
+    participants,
+    groupingResult,
+    currentRound,
+    exitedParticipants,
+    groupSettings,
     timestamp: new Date().toISOString(),
     version: '1.0'
   }
+  
+  console.log(`📦 스냅샷 데이터 수집:`, {
+    participantCount: participants.length,
+    participantNames: participants.map((p: any) => p.name),
+    currentRound,
+    hasGroupingResult: !!groupingResult,
+    exitedCount: Object.keys(exitedParticipants).length,
+    hasGroupSettings: !!groupSettings
+  })
+  
+  return data
 }
 
 // 스냅샷 생성 (로컬스토리지 + DB 동시 저장)
@@ -216,17 +233,37 @@ export async function restoreSnapshot(snapshotId: number): Promise<boolean> {
 function restoreSnapshotData(snapshot: Snapshot): boolean {
   try {
     console.log(`🔄 스냅샷 데이터 복원 시작: ${snapshot.description}`)
+    console.log(`📦 복원할 데이터 확인:`, {
+      participantCount: snapshot.data.participants?.length || 0,
+      participantNames: snapshot.data.participants?.map((p: any) => p.name) || [],
+      currentRound: snapshot.data.currentRound,
+      hasGroupingResult: !!snapshot.data.groupingResult,
+      exitedCount: Object.keys(snapshot.data.exitedParticipants || {}).length,
+      hasGroupSettings: !!snapshot.data.groupSettings,
+      snapshotTimestamp: snapshot.timestamp
+    })
     
     // 현재 상태를 '복원 전' 스냅샷으로 저장
     createSnapshot('restore_backup', `${formatDateTime(snapshot.timestamp)} 복원 전 백업`)
     
     // 데이터 복원
-    localStorage.setItem('participants', JSON.stringify(snapshot.data.participants))
+    console.log(`💾 참가자 데이터 복원: ${snapshot.data.participants?.length || 0}명`)
+    localStorage.setItem('participants', JSON.stringify(snapshot.data.participants || []))
+    
+    console.log(`💾 그룹핑 결과 복원: ${snapshot.data.groupingResult ? '있음' : '없음'}`)
     localStorage.setItem('groupingResult', JSON.stringify(snapshot.data.groupingResult))
+    
+    console.log(`💾 현재 라운드 복원: ${snapshot.data.currentRound || '1'}`)
     localStorage.setItem('currentRound', snapshot.data.currentRound || '1')
-    localStorage.setItem('exitedParticipants', JSON.stringify(snapshot.data.exitedParticipants))
+    
+    console.log(`💾 이탈 참가자 복원: ${Object.keys(snapshot.data.exitedParticipants || {}).length}명`)
+    localStorage.setItem('exitedParticipants', JSON.stringify(snapshot.data.exitedParticipants || {}))
+    
     if (snapshot.data.groupSettings) {
+      console.log(`💾 그룹 설정 복원: 있음`)
       localStorage.setItem('groupSettings', JSON.stringify(snapshot.data.groupSettings))
+    } else {
+      console.log(`💾 그룹 설정 복원: 없음 (기본값 유지)`)
     }
     
     console.log(`✅ 스냅샷 복원 완료: ${snapshot.description}`)

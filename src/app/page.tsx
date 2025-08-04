@@ -37,12 +37,18 @@ export default function Home() {
         groupHistory: []
       }
       const updatedParticipants = [...participants, newParticipant]
+      
+      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
+      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      
+      // 상태 업데이트
       setParticipants(updatedParticipants)
       setName('')
       
-      // 참가자 추가 시 스냅샷 생성
-      setTimeout(async () => {
+      // 참가자 추가 시 스냅샷 생성 (localStorage 저장 후)
+      try {
         await createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
+        console.log(`✅ 참가자 추가 스냅샷 생성 완료: ${newParticipant.name}`)
         
         // DB 저장 시도
         try {
@@ -52,13 +58,18 @@ export default function Home() {
         } catch (error) {
           console.warn('⚠️ 참가자 DB 저장 실패 (로컬은 정상):', error)
         }
-      }, 100)
+      } catch (error) {
+        console.error('❌ 스냅샷 생성 실패:', error)
+      }
     }
   }
 
   const removeParticipant = async (id: string) => {
     const participantToRemove = participants.find(p => p.id === id)
     const updatedParticipants = participants.filter(p => p.id !== id)
+    
+    // 즉시 localStorage에 저장 (스냅샷 생성 전에)
+    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
     
     if (participantToRemove) {
       // 이탈한 사람 정보를 localStorage에 저장
@@ -69,22 +80,28 @@ export default function Home() {
       }
       localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
       
-      // 참가자 제거 시 스냅샷 생성
-      await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
-      
-      // DB 저장 시도
+      // 참가자 제거 시 스냅샷 생성 (localStorage 저장 후)
       try {
-        const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
-        await Promise.all([
-          saveParticipants(updatedParticipants),
-          saveExitedParticipants(exitedParticipants)
-        ])
-        console.log('✅ 참가자 제거 DB 저장 성공')
+        await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
+        console.log(`✅ 참가자 제거 스냅샷 생성 완료: ${participantToRemove.name}`)
+        
+        // DB 저장 시도
+        try {
+          const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
+          await Promise.all([
+            saveParticipants(updatedParticipants),
+            saveExitedParticipants(exitedParticipants)
+          ])
+          console.log('✅ 참가자 제거 DB 저장 성공')
+        } catch (error) {
+          console.warn('⚠️ 참가자 제거 DB 저장 실패 (로컬은 정상):', error)
+        }
       } catch (error) {
-        console.warn('⚠️ 참가자 제거 DB 저장 실패 (로컬은 정상):', error)
+        console.error('❌ 스냅샷 생성 실패:', error)
       }
     }
     
+    // 상태 업데이트
     setParticipants(updatedParticipants)
   }
 
@@ -390,13 +407,19 @@ export default function Home() {
 
     if (newParticipants.length > 0) {
       const updatedParticipants = [...participants, ...newParticipants]
+      
+      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
+      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      
+      // 상태 업데이트
       setParticipants(updatedParticipants)
       setBulkText('')
       setShowBulkInput(false)
       
-      // 벌크 추가 시 스냅샷 생성
-      setTimeout(async () => {
+      // 벌크 추가 시 스냅샷 생성 (localStorage 저장 후)
+      try {
         await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
+        console.log(`✅ 벌크 추가 스냅샷 생성 완료: ${newParticipants.length}명`)
         
         // DB 저장 시도
         try {
@@ -406,7 +429,9 @@ export default function Home() {
         } catch (error) {
           console.warn('⚠️ 벌크 추가 DB 저장 실패 (로컬은 정상):', error)
         }
-      }, 100)
+      } catch (error) {
+        console.error('❌ 스냅샷 생성 실패:', error)
+      }
     }
   }
 
