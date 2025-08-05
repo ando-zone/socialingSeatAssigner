@@ -24,6 +24,12 @@ export default function ResultPage() {
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
   const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [editingParticipant, setEditingParticipant] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    name: '',
+    gender: 'male' as 'male' | 'female',
+    mbti: 'extrovert' as 'extrovert' | 'introvert'
+  })
 
   useEffect(() => {
     const storedResult = localStorage.getItem('groupingResult')
@@ -295,6 +301,137 @@ export default function ResultPage() {
   const cancelAddForm = () => {
     setNewParticipant({ name: '', gender: 'male', mbti: 'extrovert' })
     setShowAddForm(null)
+  }
+
+  // 참가자 수정 시작
+  const startEditParticipant = (participantId: string) => {
+    const participant = participants.find(p => p.id === participantId)
+    if (participant) {
+      setEditingParticipant(participantId)
+      setEditForm({
+        name: participant.name,
+        gender: participant.gender,
+        mbti: participant.mbti
+      })
+    }
+  }
+
+  // 참가자 수정 저장
+  const saveEditParticipant = async () => {
+    if (!editingParticipant || !editForm.name.trim() || !result) return
+
+    const participantToEdit = participants.find(p => p.id === editingParticipant)
+    if (!participantToEdit) return
+
+    // 참가자 정보 업데이트
+    const updatedParticipants = participants.map(p => 
+      p.id === editingParticipant 
+        ? { ...p, name: editForm.name.trim(), gender: editForm.gender, mbti: editForm.mbti }
+        : p
+    )
+
+    // 그룹 결과에서도 해당 참가자 정보 업데이트
+    const updatedGroups = result.groups.map(group => ({
+      ...group,
+      members: group.members.map(member => 
+        member.id === editingParticipant
+          ? { ...member, name: editForm.name.trim(), gender: editForm.gender, mbti: editForm.mbti }
+          : member
+      )
+    }))
+
+    // 완전한 그룹 결과 재계산 (통계 업데이트)
+    const fullyUpdatedResult = recalculateGroupResult(updatedGroups, updatedParticipants)
+
+    // 상태 업데이트
+    setResult(fullyUpdatedResult)
+    setParticipants(updatedParticipants)
+
+    // localStorage 업데이트
+    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
+    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+
+    // 스냅샷 생성
+    const { createSnapshot } = await import('@/utils/backup')
+    await createSnapshot('participant_edit', `참가자 정보 수정: ${participantToEdit.name} → ${editForm.name.trim()}`)
+
+    // 수정 모드 종료
+    setEditingParticipant(null)
+    setEditForm({ name: '', gender: 'male', mbti: 'extrovert' })
+  }
+
+  // 참가자 수정 취소
+  const cancelEditParticipant = () => {
+    setEditingParticipant(null)
+    setEditForm({ name: '', gender: 'male', mbti: 'extrovert' })
+  }
+
+  // 참가자 삭제
+  const deleteParticipant = async (participantId: string) => {
+    if (!result) return
+
+    const participantToDelete = participants.find(p => p.id === participantId)
+    if (!participantToDelete) return
+
+    const confirmMessage = `🗑️ "${participantToDelete.name}"을(를) 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`
+    
+    if (!confirm(confirmMessage)) return
+
+    // 이탈 참가자 목록에 추가
+    const updatedExitedParticipants = {
+      ...exitedParticipants,
+      [participantId]: {
+        name: participantToDelete.name,
+        gender: participantToDelete.gender
+      }
+    }
+
+    // 참가자 목록에서 제거
+    const updatedParticipants = participants.filter(p => p.id !== participantId)
+
+    // 그룹에서도 해당 참가자 제거
+    const updatedGroups = result.groups.map(group => ({
+      ...group,
+      members: group.members.filter(member => member.id !== participantId)
+    }))
+
+    // 완전한 그룹 결과 재계산
+    const fullyUpdatedResult = recalculateGroupResult(updatedGroups, updatedParticipants)
+
+    // 상태 업데이트
+    setResult(fullyUpdatedResult)
+    setParticipants(updatedParticipants)
+    setExitedParticipants(updatedExitedParticipants)
+
+    // localStorage 업데이트
+    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
+    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    localStorage.setItem('exitedParticipants', JSON.stringify(updatedExitedParticipants))
+
+    // DB 저장 시도
+    try {
+      const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
+      await Promise.all([
+        saveParticipants(updatedParticipants),
+        saveExitedParticipants(updatedExitedParticipants)
+      ])
+      console.log('✅ 참가자 삭제 DB 저장 성공')
+    } catch (error) {
+      console.warn('⚠️ 참가자 삭제 DB 저장 실패 (로컬은 정상):', error)
+    }
+
+    // 스냅샷 생성
+    const { createSnapshot } = await import('@/utils/backup')
+    await createSnapshot('participant_delete_result', `참가자 삭제: ${participantToDelete.name}`)
+
+    // 선택 상태 초기화
+    if (editingParticipant === participantId) {
+      setEditingParticipant(null)
+      setEditForm({ name: '', gender: 'male', mbti: 'extrovert' })
+    }
+    if (swapSelectedParticipant?.id === participantId) {
+      setSwapSelectedParticipant(null)
+    }
   }
 
   // 두 참가자 swap 함수
@@ -624,23 +761,37 @@ export default function ResultPage() {
           </div>
         </div>
 
-        {/* 위치 변경 안내 */}
+        {/* 기능 안내 */}
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
           <div className="flex">
             <div className="flex-shrink-0">
-              <div className="text-blue-400 text-lg">🔄</div>
+              <div className="text-blue-400 text-lg">🔧</div>
             </div>
             <div className="ml-3">
               <div className="text-sm text-blue-700">
-                <p className="mb-2">
-                  <strong>위치 변경:</strong> 
-                  {isMobile 
-                    ? ' 첫 번째 참가자를 터치하고, 바꿀 다른 참가자를 터치하면 두 사람의 위치가 바뀝니다.'
-                    : ' 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.'
-                  }
-                </p>
-                <p className="text-xs text-blue-600">
-                  📝 <strong>업데이트되는 상태:</strong> 그룹 구성, 성별/MBTI 통계, 새로운 만남 수, 그룹 히스토리
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="mb-1">
+                      <strong>🔄 위치 변경:</strong> 
+                      {isMobile 
+                        ? ' 첫 번째 참가자를 터치하고, 바꿀 다른 참가자를 터치하면 두 사람의 위치가 바뀝니다.'
+                        : ' 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.'
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1">
+                      <strong>✏️ 정보 수정:</strong> 수정 버튼을 클릭하면 참가자의 이름, 성별, MBTI를 변경할 수 있습니다.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1">
+                      <strong>🗑️ 참가자 삭제:</strong> 삭제 버튼을 클릭하면 해당 참가자를 그룹에서 제거할 수 있습니다.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 mt-3">
+                  📝 <strong>업데이트되는 상태:</strong> 그룹 구성, 성별/MBTI 통계, 새로운 만남 수, 그룹 히스토리가 자동으로 재계산됩니다.
                 </p>
                 {swapSelectedParticipant && (
                   <div className="flex items-center justify-between mt-2">
@@ -786,57 +937,138 @@ export default function ResultPage() {
                   return (
                     <div 
                       key={member.id} 
-                      draggable={!isMobile}
-                      onDragStart={!isMobile ? () => handleDragStart(member.id, group.id) : undefined}
-                      onDragOver={!isMobile ? handleDragOver : undefined}
-                      onDrop={!isMobile ? () => handleDrop(member.id, group.id) : undefined}
-                      onClick={isMobile ? () => handleParticipantClick(member.id, group.id) : undefined}
                       className={`
-                        flex items-center justify-between p-2 border border-gray-200 rounded transition-all duration-200
-                        ${isMobile ? 'cursor-pointer' : 'cursor-move'}
+                        border border-gray-200 rounded transition-all duration-200
+                        ${editingParticipant === member.id ? 'border-purple-400 bg-purple-50' : ''}
                         ${isDragging ? 'opacity-50 scale-95 border-blue-400 bg-blue-50' : ''}
                         ${isSelected ? 'border-orange-500 bg-orange-100 shadow-lg ring-2 ring-orange-300' : ''}
                         ${isSwapTarget ? 'border-green-500 bg-green-100 hover:border-green-600 hover:bg-green-200 shadow-lg ring-2 ring-green-300' : ''}
-                        ${!isDragging && !isSelected && !isSwapTarget ? 'hover:border-blue-300 hover:bg-blue-50' : ''}
+                        ${!isDragging && !isSelected && !isSwapTarget && editingParticipant !== member.id ? 'hover:border-blue-300 hover:bg-blue-50' : ''}
                         ${draggedParticipant && draggedParticipant.id !== member.id && draggedParticipant.fromGroupId !== group.id ? 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 shadow-md' : ''}
                       `}
-                      title={
-                        isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
-                        isSwapTarget ? `${member.name}과 위치 바꾸기` :
-                        isMobile ? '터치해서 선택' :
-                        draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : '드래그해서 다른 사람과 위치 바꾸기'
-                      }
                     >
-                      <div>
-                        <span className="font-medium">{member.name}</span>
-                        <div className="text-xs text-gray-500">
-                          {member.gender === 'male' ? '남성' : '여성'} · {' '}
-                          {member.mbti === 'extrovert' ? '외향' : '내향'}
+                      {editingParticipant === member.id ? (
+                        // 수정 모드
+                        <div className="p-3 space-y-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-medium text-purple-700">참가자 정보 수정</h4>
+                            <div className="text-xs text-purple-600">그룹 {group.id}</div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              placeholder="이름"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            />
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                              <select
+                                value={editForm.gender}
+                                onChange={(e) => setEditForm({...editForm, gender: e.target.value as 'male' | 'female'})}
+                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="male">남성</option>
+                                <option value="female">여성</option>
+                              </select>
+                              
+                              <select
+                                value={editForm.mbti}
+                                onChange={(e) => setEditForm({...editForm, mbti: e.target.value as 'extrovert' | 'introvert'})}
+                                className="border border-gray-300 rounded-md px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              >
+                                <option value="extrovert">외향형</option>
+                                <option value="introvert">내향형</option>
+                              </select>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button
+                              onClick={saveEditParticipant}
+                              disabled={!editForm.name.trim()}
+                              className="flex-1 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-400 text-white font-medium py-2 px-3 rounded-md text-sm"
+                            >
+                              저장
+                            </button>
+                            <button
+                              onClick={cancelEditParticipant}
+                              className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-3 rounded-md text-sm"
+                            >
+                              취소
+                            </button>
+                          </div>
                         </div>
-                        <div className="text-xs text-blue-600">
-                          현재 그룹: {group.id}
+                      ) : (
+                        // 일반 모드
+                        <div className="flex items-center justify-between p-2">
+                          <div 
+                            draggable={!isMobile && !swapSelectedParticipant}
+                            onDragStart={!isMobile && !swapSelectedParticipant ? () => handleDragStart(member.id, group.id) : undefined}
+                            onDragOver={!isMobile ? handleDragOver : undefined}
+                            onDrop={!isMobile ? () => handleDrop(member.id, group.id) : undefined}
+                            onClick={isMobile && !swapSelectedParticipant ? () => handleParticipantClick(member.id, group.id) : undefined}
+                            className={`flex-1 ${
+                              !swapSelectedParticipant ? (isMobile ? 'cursor-pointer' : 'cursor-move') : 'cursor-default'
+                            }`}
+                            title={
+                              isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
+                              isSwapTarget ? `${member.name}과 위치 바꾸기` :
+                              !swapSelectedParticipant && isMobile ? '터치해서 선택' :
+                              !swapSelectedParticipant && draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : 
+                              !swapSelectedParticipant ? '드래그해서 다른 사람과 위치 바꾸기' : ''
+                            }
+                          >
+                            <span className="font-medium">{member.name}</span>
+                            <div className="text-xs text-gray-500">
+                              {member.gender === 'male' ? '남성' : '여성'} · {' '}
+                              {member.mbti === 'extrovert' ? '외향' : '내향'}
+                            </div>
+                            <div className="text-xs text-blue-600">
+                              현재 그룹: {group.id}
+                            </div>
+                            {previousGroups.length > 0 && (
+                              <div className="text-xs text-gray-400">
+                                이전: {previousGroups.slice(-3).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1 ml-2">
+                            {isSelected && (
+                              <div className="text-orange-500 text-sm font-bold animate-pulse">
+                                ✅
+                              </div>
+                            )}
+                            {isSwapTarget && (
+                              <div className="text-green-500 text-sm font-bold animate-bounce">
+                                🔄
+                              </div>
+                            )}
+                            
+                            {!isSelected && !isSwapTarget && (
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => startEditParticipant(member.id)}
+                                  className="text-purple-500 hover:text-purple-700 text-xs px-1 py-1 rounded hover:bg-purple-100 transition-colors"
+                                  title="참가자 정보 수정"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => deleteParticipant(member.id)}
+                                  className="text-red-500 hover:text-red-700 text-xs px-1 py-1 rounded hover:bg-red-100 transition-colors"
+                                  title="참가자 삭제"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isSelected && (
-                          <div className="text-orange-500 text-sm font-bold animate-pulse">
-                            ✅
-                          </div>
-                        )}
-                        {isSwapTarget && (
-                          <div className="text-green-500 text-sm font-bold animate-bounce">
-                            🔄
-                          </div>
-                        )}
-                        {previousGroups.length > 0 && (
-                          <div className="text-xs text-gray-400">
-                            이전: {previousGroups.slice(-3).join(', ')}
-                          </div>
-                        )}
-                        {!isSelected && !isSwapTarget && (
-                          <div className="text-gray-400 text-sm">⋮⋮</div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   )
                 })}
