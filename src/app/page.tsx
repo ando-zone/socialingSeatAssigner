@@ -930,10 +930,21 @@ export default function Home() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-medium text-blue-100">현재 진행중</h3>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
-                      {currentRound}라운드
-                    </div>
+                    {hasExistingResult ? (
+                      <>
+                        <h3 className="text-lg font-medium text-green-200">배치 완료</h3>
+                        <div className="text-3xl font-bold bg-gradient-to-r from-green-300 to-emerald-300 bg-clip-text text-transparent">
+                          {currentRound - 1}라운드 배치 완료
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-medium text-blue-100">배치 준비</h3>
+                        <div className="text-3xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
+                          {currentRound}라운드 배치 전
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -1128,7 +1139,7 @@ export default function Home() {
                     className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2 mx-auto"
                   >
                     <span className="text-lg">📊</span>
-                    <span>이전 결과 확인하기</span>
+                    <span>배치 결과 확인하기</span>
                   </button>
                   <p className="text-xs text-gray-500 mt-1">
                     이전에 배치한 그룹 결과를 확인할 수 있습니다
