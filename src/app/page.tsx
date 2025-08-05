@@ -1123,29 +1123,26 @@ export default function Home() {
           </div>
           
           {participants.length >= 2 && (
-            <div className="mt-6 text-center space-y-3">
-              <button 
-                onClick={handleGrouping}
-                disabled={isLoading}
-                className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
-              >
-                {isLoading ? '배치 중...' : '그룹 배치하기'}
-              </button>
-              
-              {isClient && hasExistingResult && (
-                <div>
+            <div className="mt-6 text-center">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <button 
+                  onClick={handleGrouping}
+                  disabled={isLoading}
+                  className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
+                >
+                  {isLoading ? '배치 중...' : '새롭게 그룹 배치하기'}
+                </button>
+                
+                {isClient && hasExistingResult && (
                   <button
                     onClick={() => router.push('/result')}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2 mx-auto"
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2"
                   >
                     <span className="text-lg">📊</span>
                     <span>배치 결과 확인하기</span>
                   </button>
-                  <p className="text-xs text-gray-500 mt-1">
-                    이전에 배치한 그룹 결과를 확인할 수 있습니다
-                  </p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
         </div>
