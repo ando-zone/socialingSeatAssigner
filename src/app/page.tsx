@@ -1213,7 +1213,7 @@ export default function Home() {
                   <p className="text-gray-500 text-sm">저장된 스냅샷이 없습니다.</p>
                 ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {snapshots.slice(-10).reverse().map((snapshot) => (
+                    {snapshots.slice(-20).reverse().map((snapshot) => (
                       <div 
                         key={snapshot.id}
                         className="flex justify-between items-center p-3 border border-gray-200 rounded-md hover:bg-gray-50"
