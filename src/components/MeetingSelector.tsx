@@ -2,13 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { createSupabaseClient } from '@/lib/supabase'
-import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, type Meeting } from '@/utils/database'
+import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, type Meeting } from '@/utils/database'
+import { clearMeetingData } from '@/utils/meeting-storage'
 import type { User } from '@supabase/supabase-js'
 
 interface MeetingSelectorProps {
   user: User
   onMeetingSelected: () => void
 }
+
+type SortOption = 'created_asc' | 'created_desc' | 'name_asc' | 'name_desc' | 'updated_desc'
 
 export default function MeetingSelector({ user, onMeetingSelected }: MeetingSelectorProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
@@ -17,6 +20,8 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
   const [newMeetingName, setNewMeetingName] = useState('')
   const [creatingMeeting, setCreatingMeeting] = useState(false)
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<SortOption>('updated_desc')
+  const [deletingMeetingId, setDeletingMeetingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadMeetings()
@@ -68,6 +73,76 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
     } catch (error) {
       console.error('모임 선택 중 오류:', error)
       alert('모임 선택 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleDeleteMeeting = async (meetingId: string, meetingName: string) => {
+    const confirmMessage = `⚠️ 모임 삭제 확인
+
+🗑️ 삭제할 모임: "${meetingName}"
+
+다음 데이터가 영구적으로 삭제됩니다:
+• 모든 참가자 정보
+• 그룹 배치 기록
+• 스냅샷 백업
+• 모임 설정
+
+❌ 이 작업은 되돌릴 수 없습니다!
+
+정말로 삭제하시겠습니까?`
+
+    if (!confirm(confirmMessage)) return
+
+    const secondConfirmMessage = `🚨 최종 확인
+
+"${meetingName}" 모임을 정말로 삭제하시겠습니까?
+
+이 작업은 되돌릴 수 없습니다!`
+
+    if (!confirm(secondConfirmMessage)) return
+
+    setDeletingMeetingId(meetingId)
+    try {
+      const success = await deleteMeeting(meetingId, user.id)
+      if (success) {
+        // 로컬스토리지에서도 해당 모임 데이터 삭제
+        clearMeetingData(meetingId)
+        
+        // 현재 선택된 모임이 삭제된 모임이면 선택 해제
+        if (selectedMeetingId === meetingId) {
+          setSelectedMeetingId(null)
+        }
+        
+        // 모임 목록 새로고침
+        await loadMeetings()
+        alert('✅ 모임이 성공적으로 삭제되었습니다.')
+      } else {
+        alert('❌ 모임 삭제 중 오류가 발생했습니다.')
+      }
+    } catch (error) {
+      console.error('모임 삭제 중 오류:', error)
+      alert('❌ 모임 삭제 중 오류가 발생했습니다.')
+    } finally {
+      setDeletingMeetingId(null)
+    }
+  }
+
+  // 모임 정렬 함수
+  const sortMeetings = (meetings: Meeting[], sortOption: SortOption): Meeting[] => {
+    const sorted = [...meetings]
+    
+    switch (sortOption) {
+      case 'created_asc':
+        return sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      case 'created_desc':
+        return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      case 'name_asc':
+        return sorted.sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+      case 'name_desc':
+        return sorted.sort((a, b) => b.name.localeCompare(a.name, 'ko'))
+      case 'updated_desc':
+      default:
+        return sorted.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     }
   }
 
@@ -154,9 +229,29 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
 
         {/* 기존 모임 목록 */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4">
-            기존 모임 목록 ({meetings.length}개)
-          </h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">
+              기존 모임 목록 ({meetings.length}개)
+            </h3>
+            
+            {/* 정렬 옵션 */}
+            {meetings.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">정렬:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortOption)}
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="updated_desc">최근 업데이트순</option>
+                  <option value="created_desc">최신 생성순</option>
+                  <option value="created_asc">오래된 생성순</option>
+                  <option value="name_asc">이름 오름차순</option>
+                  <option value="name_desc">이름 내림차순</option>
+                </select>
+              </div>
+            )}
+          </div>
           
           {meetings.length === 0 ? (
             <div className="text-center py-8">
@@ -168,7 +263,7 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {meetings.map((meeting) => (
+              {sortMeetings(meetings, sortBy).map((meeting) => (
                 <div
                   key={meeting.id}
                   className={`border-2 rounded-lg p-4 cursor-pointer transition-all duration-200 ${
@@ -179,32 +274,53 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
                   onClick={() => handleSelectMeeting(meeting.id)}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <h4 className="font-medium text-gray-800 flex-1 line-clamp-2">
+                    <h4 className="font-medium text-gray-800 flex-1 line-clamp-2 pr-2">
                       {meeting.name}
                     </h4>
-                    {selectedMeetingId === meeting.id && (
-                      <div className="text-blue-500 ml-2">
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {/* 삭제 버튼 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteMeeting(meeting.id, meeting.name)
+                        }}
+                        disabled={deletingMeetingId === meeting.id}
+                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="모임 삭제"
+                      >
+                        {deletingMeetingId === meeting.id ? (
+                          <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                      
+                      {/* 선택 표시 */}
+                      {selectedMeetingId === meeting.id && (
+                        <div className="text-blue-500">
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="space-y-2 text-sm text-gray-600">
                     <div className="flex items-center">
-                      <span className="mr-2">🎯</span>
-                      <span>{meeting.current_round}라운드</span>
-                    </div>
-                    <div className="flex items-center">
                       <span className="mr-2">📅</span>
-                      <span>{formatDate(meeting.updated_at)}</span>
+                      <span>생성: {formatDate(meeting.created_at)}</span>
                     </div>
                   </div>
                   
                   <div className="mt-4 pt-3 border-t border-gray-200">
                     <div className="text-xs text-gray-500">
-                      마지막 업데이트: {formatDate(meeting.updated_at)}
+                      {meeting.created_at === meeting.updated_at 
+                        ? `생성: ${formatDate(meeting.created_at)}`
+                        : `최근 업데이트: ${formatDate(meeting.updated_at)}`
+                      }
                     </div>
                   </div>
                 </div>

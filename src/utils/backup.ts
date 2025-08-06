@@ -1,4 +1,5 @@
 import { saveSnapshot as saveSnapshotToDB } from './database'
+import { meetingStorage } from './meeting-storage'
 
 export interface BackupData {
   participants: any[]
@@ -32,11 +33,11 @@ export function getCurrentData(): BackupData {
     }
   }
   
-  const participants = JSON.parse(localStorage.getItem('participants') || '[]')
-  const groupingResult = JSON.parse(localStorage.getItem('groupingResult') || 'null')
-  const currentRound = localStorage.getItem('currentRound')
-  const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
-  const groupSettings = JSON.parse(localStorage.getItem('groupSettings') || 'null')
+  const participants = meetingStorage.getParticipants() || []
+  const groupingResult = meetingStorage.getGroupingResult()
+  const currentRound = String(meetingStorage.getCurrentRound())
+  const exitedParticipants = meetingStorage.getExitedParticipants() || {}
+  const groupSettings = meetingStorage.getGroupSettings()
   
   const data = {
     participants,
@@ -77,8 +78,8 @@ export async function createSnapshot(eventType: string, description: string): Pr
     currentRound: data.currentRound
   })
   
-  // 로컬스토리지 저장 (기존 방식)
-  const snapshots = getSnapshotsSync()  // 동기 버전 사용
+  // 모임별 로컬스토리지 저장
+  const snapshots = meetingStorage.getSnapshots()  // 모임별 조회
   const snapshot: Snapshot = {
     id: snapshotId,
     timestamp,
@@ -95,7 +96,7 @@ export async function createSnapshot(eventType: string, description: string): Pr
     console.log(`🧹 오래된 스냅샷 제거:`, removed?.id)
   }
   
-  localStorage.setItem('snapshots', JSON.stringify(snapshots))
+  meetingStorage.setSnapshots(snapshots)
   console.log(`✅ 로컬 스냅샷 저장 완료: ${description} (ID: ${snapshotId})`)
   console.log(`📊 현재 로컬 스냅샷 수: ${snapshots.length}개`)
   
@@ -117,7 +118,7 @@ export async function createSnapshot(eventType: string, description: string): Pr
 export async function getSnapshots(): Promise<Snapshot[]> {
   if (typeof window === 'undefined') return []
   
-  const localSnapshots = JSON.parse(localStorage.getItem('snapshots') || '[]')
+  const localSnapshots = meetingStorage.getSnapshots()
   console.log(`📋 로컬 스냅샷 조회: ${localSnapshots.length}개 발견`)
   console.log(`📋 로컬 스냅샷 ID들:`, localSnapshots.map((s: any) => s.id))
   
@@ -172,7 +173,7 @@ export async function getSnapshots(): Promise<Snapshot[]> {
 // 동기 버전 (기존 호환성 유지)
 export function getSnapshotsSync(): Snapshot[] {
   if (typeof window === 'undefined') return []
-  return JSON.parse(localStorage.getItem('snapshots') || '[]')
+  return meetingStorage.getSnapshots()
 }
 
 // 특정 스냅샷으로 복원 (통합 버전)
@@ -248,20 +249,20 @@ function restoreSnapshotData(snapshot: Snapshot): boolean {
     
     // 데이터 복원
     console.log(`💾 참가자 데이터 복원: ${snapshot.data.participants?.length || 0}명`)
-    localStorage.setItem('participants', JSON.stringify(snapshot.data.participants || []))
+    meetingStorage.setParticipants(snapshot.data.participants || [])
     
     console.log(`💾 그룹핑 결과 복원: ${snapshot.data.groupingResult ? '있음' : '없음'}`)
-    localStorage.setItem('groupingResult', JSON.stringify(snapshot.data.groupingResult))
+    meetingStorage.setGroupingResult(snapshot.data.groupingResult)
     
-    console.log(`💾 현재 라운드 복원: ${snapshot.data.currentRound || '1'}`)
-    localStorage.setItem('currentRound', snapshot.data.currentRound || '1')
+    console.log(`💾 현재 라운드 복원: ${snapshot.data.currentRound || '0'}`)
+    meetingStorage.setCurrentRound(parseInt(snapshot.data.currentRound || '0', 10))
     
     console.log(`💾 이탈 참가자 복원: ${Object.keys(snapshot.data.exitedParticipants || {}).length}명`)
-    localStorage.setItem('exitedParticipants', JSON.stringify(snapshot.data.exitedParticipants || {}))
+    meetingStorage.setExitedParticipants(snapshot.data.exitedParticipants || {})
     
     if (snapshot.data.groupSettings) {
       console.log(`💾 그룹 설정 복원: 있음`)
-      localStorage.setItem('groupSettings', JSON.stringify(snapshot.data.groupSettings))
+      meetingStorage.setGroupSettings(snapshot.data.groupSettings)
     } else {
       console.log(`💾 그룹 설정 복원: 없음 (기본값 유지)`)
     }
@@ -328,12 +329,13 @@ export function importFromJSON(file: File): Promise<boolean> {
         createSnapshot('import_backup', '데이터 가져오기 전 백업')
         
         // 데이터 복원
-        localStorage.setItem('participants', JSON.stringify(data.participants))
-        localStorage.setItem('groupingResult', JSON.stringify(data.groupingResult))
-        localStorage.setItem('currentRound', data.currentRound || '1')
-        localStorage.setItem('exitedParticipants', JSON.stringify(data.exitedParticipants || {}))
+        // 모임별 저장
+        meetingStorage.setParticipants(data.participants)
+        meetingStorage.setGroupingResult(data.groupingResult)
+        meetingStorage.setCurrentRound(parseInt(data.currentRound || '0', 10))
+        meetingStorage.setExitedParticipants(data.exitedParticipants || {})
         if (data.groupSettings) {
-          localStorage.setItem('groupSettings', JSON.stringify(data.groupSettings))
+          meetingStorage.setGroupSettings(data.groupSettings)
         }
         
         console.log('📥 데이터 가져오기 완료')

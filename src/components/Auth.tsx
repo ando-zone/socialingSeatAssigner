@@ -109,90 +109,39 @@ export default function Auth({ children }: AuthProps) {
       // 현재 저장된 모임 ID 확인
       let meetingId = getCurrentMeetingId()
       
-      // 사용자가 있고 Supabase가 설정된 경우 자동 모임 찾기 시도
+      // 사용자가 있고 Supabase가 설정된 경우에도 항상 모임 선택 화면을 표시
+      // 기존의 자동 모임 선택 로직을 제거하여 사용자가 직접 선택하도록 함
       if (user && supabase && isSupabaseConfigured) {
-        console.log('🔍 자동 모임 동기화 시작...')
+        console.log('🔍 사용자 로그인 확인됨, 모임 선택 화면으로 이동')
         
-        const { getUserMeetings } = await import('@/utils/database')
-        const userMeetings = await getUserMeetings(user.id)
-        
-        if (userMeetings.length > 0) {
-          // 현재 모임이 사용자 모임 목록에 있는지 확인
-          const currentMeetingExists = meetingId && userMeetings.find(m => m.id === meetingId)
+        // 기존 모임 ID가 있는지만 확인하고, 자동 선택은 하지 않음
+        if (meetingId) {
+          const { getUserMeetings } = await import('@/utils/database')
+          const userMeetings = await getUserMeetings(user.id)
+          
+          // 현재 모임이 사용자의 모임 목록에 있는지 확인
+          const currentMeetingExists = userMeetings.find(m => m.id === meetingId)
           
           if (!currentMeetingExists) {
-            // 가장 최근에 업데이트된 모임을 선택
-            const latestMeeting = userMeetings.sort((a, b) => 
-              new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            )[0]
-            
-            console.log('✅ 자동으로 최근 모임 선택:', latestMeeting.name)
+            // 현재 모임이 유효하지 않으면 제거
+            console.log('⚠️ 기존 모임이 유효하지 않음, 모임 선택 필요')
             const { setCurrentMeetingId } = await import('@/utils/database')
-            setCurrentMeetingId(latestMeeting.id)
-            meetingId = latestMeeting.id
-            
-            // DB에서 데이터 로드 시도
-            try {
-              const { 
-                getParticipants, 
-                getGroupingResult, 
-                getGroupSettings, 
-                getExitedParticipants 
-              } = await import('@/utils/database')
-              
-              console.log('📥 모임 데이터 동기화 시작...')
-              
-              const [participants, groupingResult, groupSettings, exitedParticipants] = await Promise.all([
-                getParticipants(),
-                getGroupingResult(), 
-                getGroupSettings(),
-                getExitedParticipants()
-              ])
-              
-              // 로컬스토리지에 동기화
-              if (participants.length > 0) {
-                localStorage.setItem('participants', JSON.stringify(participants))
-                console.log('✅ 참가자 데이터 동기화 완료:', participants.length + '명')
-              }
-              
-              if (groupingResult) {
-                localStorage.setItem('groupingResult', JSON.stringify(groupingResult))
-                localStorage.setItem('currentRound', String(groupingResult.round + 1))
-                console.log('✅ 그룹 결과 동기화 완료: ' + groupingResult.round + '라운드')
-              } else {
-                localStorage.setItem('currentRound', String(latestMeeting.current_round))
-              }
-              
-              if (groupSettings) {
-                localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
-                console.log('✅ 그룹 설정 동기화 완료')
-              }
-              
-              if (Object.keys(exitedParticipants).length > 0) {
-                localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
-                console.log('✅ 이탈 참가자 동기화 완료')
-              }
-              
-              console.log('🎉 모든 데이터 동기화 완료!')
-              
-            } catch (syncError) {
-              console.warn('⚠️ 데이터 동기화 실패 (모임 선택은 성공):', syncError)
-            }
+            setCurrentMeetingId('')
+            meetingId = null
           } else {
-            console.log('✅ 기존 모임이 유효함:', meetingId)
+            console.log('✅ 기존 모임이 유효함, 하지만 모임 선택 화면을 표시')
+            // 유효한 모임이 있어도 사용자가 다시 선택할 수 있도록 함
+            meetingId = null
           }
-        } else {
-          console.log('ℹ️ 사용자에게 모임이 없음')
-          meetingId = null
         }
       }
       
-      setHasMeeting(!!meetingId)
+      // 항상 모임 선택 화면을 표시하도록 false로 설정
+      setHasMeeting(false)
     } catch (error) {
       console.error('모임 상태 확인 중 오류:', error)
-      // 에러가 발생해도 기존 로직 유지
-      const meetingId = getCurrentMeetingId()
-      setHasMeeting(!!meetingId)
+      // 에러가 발생해도 모임 선택 화면을 표시
+      setHasMeeting(false)
     } finally {
       setCheckingMeeting(false)
     }

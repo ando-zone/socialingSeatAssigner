@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult } from '@/utils/grouping'
 import { createSnapshot, exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, formatDateTime } from '@/utils/backup'
+import { meetingStorage } from '@/utils/meeting-storage'
+import { getCurrentMeeting, type Meeting } from '@/utils/database'
 
 export default function Home() {
   const router = useRouter()
@@ -11,7 +13,7 @@ export default function Home() {
   const [name, setName] = useState('')
   const [gender, setGender] = useState<'male' | 'female'>('male')
   const [mbti, setMbti] = useState<'extrovert' | 'introvert'>('extrovert')
-  const [currentRound, setCurrentRound] = useState(1)
+  const [currentRound, setCurrentRound] = useState(0)  // 초기값: 완료된 라운드 0개
   const [groupSize, setGroupSize] = useState(4)
   const [isLoading, setIsLoading] = useState(false)
   const [groupingMode, setGroupingMode] = useState<'auto' | 'manual'>('manual')
@@ -24,6 +26,7 @@ export default function Home() {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [hasExistingResult, setHasExistingResult] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null)
 
   const addParticipant = async () => {
     if (name.trim()) {
@@ -38,8 +41,8 @@ export default function Home() {
       }
       const updatedParticipants = [...participants, newParticipant]
       
-      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      // 즉시 모임별 저장 (스냅샷 생성 전에)
+      meetingStorage.setParticipants(updatedParticipants)
       
       // 상태 업데이트
       setParticipants(updatedParticipants)
@@ -68,17 +71,17 @@ export default function Home() {
     const participantToRemove = participants.find(p => p.id === id)
     const updatedParticipants = participants.filter(p => p.id !== id)
     
-    // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    // 즉시 모임별 저장 (스냅샷 생성 전에)
+    meetingStorage.setParticipants(updatedParticipants)
     
     if (participantToRemove) {
-      // 이탈한 사람 정보를 localStorage에 저장
-      const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+      // 이탈한 사람 정보를 모임별 저장
+      const exitedParticipants: Record<string, { name: string; gender: 'male' | 'female' }> = meetingStorage.getExitedParticipants() || {}
       exitedParticipants[id] = {
         name: participantToRemove.name,
         gender: participantToRemove.gender
       }
-      localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
+      meetingStorage.setExitedParticipants(exitedParticipants)
       
       // 참가자 제거 시 스냅샷 생성 (localStorage 저장 후)
       try {
@@ -169,10 +172,10 @@ export default function Home() {
       
       const nextRound = currentRound + 1
       
-      // 로컬스토리지 저장
-      localStorage.setItem('groupingResult', JSON.stringify(result))
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
-      localStorage.setItem('currentRound', String(nextRound))
+      // 모임별 저장
+      meetingStorage.setGroupingResult(result)
+      meetingStorage.setParticipants(updatedParticipants)
+      meetingStorage.setCurrentRound(nextRound)
       
       // 그룹 설정 저장
       const groupSettings = {
@@ -181,7 +184,7 @@ export default function Home() {
         numGroups,
         customGroupSizes
       }
-      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
+      meetingStorage.setGroupSettings(groupSettings)
       
       // 데이터베이스 저장 시도
       const meetingId = getCurrentMeetingId()
@@ -190,8 +193,9 @@ export default function Home() {
           console.log('🔄 데이터베이스 동기화 시작...')
           
           // 병렬로 DB 저장 실행
+          // current_round는 완료된 라운드 번호로 저장 (nextRound - 1 = currentRound)
           const savePromises = [
-            updateMeetingRound(meetingId, nextRound),
+            updateMeetingRound(meetingId, currentRound),
             saveParticipants(updatedParticipants),
             saveGroupingResult(result),
             saveGroupSettings(groupSettings)
@@ -280,39 +284,39 @@ export default function Home() {
     // 클라이언트임을 표시
     setIsClient(true)
     
-    const storedParticipants = localStorage.getItem('participants')
-    const storedRound = localStorage.getItem('currentRound')
-    const storedGroupSettings = localStorage.getItem('groupSettings')
-    const storedResult = localStorage.getItem('groupingResult')
+    const storedParticipants = meetingStorage.getParticipants()
+    const storedRound = meetingStorage.getCurrentRound()
+    const storedGroupSettings = meetingStorage.getGroupSettings()
+    const storedResult = meetingStorage.getGroupingResult()
     
     // 기존 결과가 있는지 확인
     setHasExistingResult(!!storedResult)
     
-    if (storedParticipants) {
-      const participants = JSON.parse(storedParticipants)
-      const currentRound = storedRound ? Number(storedRound) : 1
+    if (storedParticipants && storedParticipants.length > 0) {
+      const participants = storedParticipants
+      const currentRound = storedRound || 0  // 초기값을 0으로 변경 (아직 완료된 라운드 없음)
       
       // 데이터 마이그레이션 적용
       const migratedParticipants = migrateParticipantData(participants, currentRound)
       
       setParticipants(migratedParticipants)
       
-      // 마이그레이션된 데이터를 localStorage에 저장
-      localStorage.setItem('participants', JSON.stringify(migratedParticipants))
+      // 마이그레이션된 데이터를 모임별 저장
+      meetingStorage.setParticipants(migratedParticipants)
     }
     if (storedRound) {
-      setCurrentRound(Number(storedRound))
+      setCurrentRound(storedRound)
     }
     
     // 그룹 설정 복원
-    if (storedGroupSettings) {
+    if (storedGroupSettings && Object.keys(storedGroupSettings).length > 0) {
       try {
-        const groupSettings = JSON.parse(storedGroupSettings)
-        console.log('저장된 그룹 설정 복원:', groupSettings)
-        if (groupSettings.groupingMode) setGroupingMode(groupSettings.groupingMode)
-        if (groupSettings.groupSize) setGroupSize(groupSettings.groupSize)
-        if (groupSettings.numGroups) setNumGroups(groupSettings.numGroups)
-        if (groupSettings.customGroupSizes) setCustomGroupSizes(groupSettings.customGroupSizes)
+        const settings = storedGroupSettings as any
+        console.log('저장된 그룹 설정 복원:', settings)
+        if (settings.groupingMode) setGroupingMode(settings.groupingMode)
+        if (settings.groupSize) setGroupSize(settings.groupSize)
+        if (settings.numGroups) setNumGroups(settings.numGroups)
+        if (settings.customGroupSizes) setCustomGroupSizes(settings.customGroupSizes)
       } catch (error) {
         console.error('그룹 설정 복원 중 오류:', error)
       }
@@ -324,7 +328,7 @@ export default function Home() {
     setIsInitialLoad(false)
   }, [])
 
-  // 그룹 설정 변경 시 localStorage에 저장 (초기 로드 후에만)
+  // 그룹 설정 변경 시 모임별 저장 (초기 로드 후에만)
   useEffect(() => {
     if (!isInitialLoad) {
       const groupSettings = {
@@ -333,7 +337,7 @@ export default function Home() {
         numGroups,
         customGroupSizes
       }
-      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
+      meetingStorage.setGroupSettings(groupSettings)
       console.log('그룹 설정 저장됨:', groupSettings)
     }
   }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
@@ -408,8 +412,8 @@ export default function Home() {
     if (newParticipants.length > 0) {
       const updatedParticipants = [...participants, ...newParticipants]
       
-      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      // 즉시 모임별 저장 (스냅샷 생성 전에)
+      meetingStorage.setParticipants(updatedParticipants)
       
       // 상태 업데이트
       setParticipants(updatedParticipants)
@@ -446,13 +450,25 @@ export default function Home() {
 
     try {
       await importFromJSON(file)
-      // 데이터 가져온 후 기존 결과 확인 (클라이언트에서만)
+      
+      // 가져온 데이터로 상태 직접 업데이트 (새로고침 없이)
       if (typeof window !== 'undefined') {
-        const storedResult = localStorage.getItem('groupingResult')
-        setHasExistingResult(!!storedResult)
+        const importedParticipants = meetingStorage.getParticipants() || []
+        const importedGroupingResult = meetingStorage.getGroupingResult()
+        const importedCurrentRound = meetingStorage.getCurrentRound() || 0
+        const importedExitedParticipants = meetingStorage.getExitedParticipants() || {}
+        const importedGroupSettings = meetingStorage.getGroupSettings() || {}
+        
+        // 상태 직접 업데이트
+        setParticipants(importedParticipants)
+        setCurrentRound(importedCurrentRound)
+        setHasExistingResult(!!importedGroupingResult)
+        
+        // 스냅샷 목록도 새로고침
+        refreshSnapshots()
       }
+      
       alert('데이터를 성공적으로 가져왔습니다!')
-      window.location.reload() // 페이지 새로고침으로 상태 반영
     } catch (error) {
       alert('데이터 가져오기 실패: ' + (error as Error).message)
     }
@@ -470,14 +486,24 @@ export default function Home() {
         if (success) {
           console.log('✅ 스냅샷 복원 성공!')
           
-          // 복원 후 기존 결과 확인 (클라이언트에서만)
+          // 복원된 데이터로 상태 직접 업데이트 (새로고침 없이)
           if (typeof window !== 'undefined') {
-            const storedResult = localStorage.getItem('groupingResult')
-            setHasExistingResult(!!storedResult)
+            const restoredParticipants = meetingStorage.getParticipants() || []
+            const restoredGroupingResult = meetingStorage.getGroupingResult()
+            const restoredCurrentRound = meetingStorage.getCurrentRound() || 0
+            const restoredExitedParticipants = meetingStorage.getExitedParticipants() || {}
+            const restoredGroupSettings = meetingStorage.getGroupSettings() || {}
+            
+            // 상태 직접 업데이트
+            setParticipants(restoredParticipants)
+            setCurrentRound(restoredCurrentRound)
+            setHasExistingResult(!!restoredGroupingResult)
+            
+            // 스냅샷 목록도 새로고침
+            refreshSnapshots()
           }
           
           alert('✅ 복원이 완료되었습니다!')
-          window.location.reload()
         } else {
           console.error('❌ 스냅샷 복원 실패')
           alert('❌ 복원 중 오류가 발생했습니다. 콘솔을 확인해주세요.')
@@ -502,9 +528,22 @@ export default function Home() {
     }
   }
 
+  const loadCurrentMeeting = async () => {
+    if (typeof window !== 'undefined') {
+      try {
+        const meeting = await getCurrentMeeting()
+        setCurrentMeeting(meeting)
+      } catch (error) {
+        console.error('현재 모임 정보 로드 중 오류:', error)
+        setCurrentMeeting(null)
+      }
+    }
+  }
+
   // 컴포넌트 마운트 시 스냅샷 목록 새로고침
   useEffect(() => {
     refreshSnapshots()
+    loadCurrentMeeting()
   }, [participants, currentRound])
 
   // 클라이언트사이드에서만 스냅샷 로드
@@ -530,16 +569,16 @@ export default function Home() {
 
     if (confirm(confirmMessage)) {
       try {
-        // localStorage의 모임 관련 데이터만 삭제 (백업은 유지)
-        localStorage.removeItem('participants')
-        localStorage.removeItem('currentRound')
-        localStorage.removeItem('groupingResult')
-        localStorage.removeItem('exitedParticipants')
-        localStorage.removeItem('groupSettings')
+        // 현재 모임의 데이터만 삭제 (백업은 유지)
+        meetingStorage.setParticipants([])
+        meetingStorage.setCurrentRound(0)
+        meetingStorage.setGroupingResult(null)
+        meetingStorage.setExitedParticipants({})
+        meetingStorage.setGroupSettings({})
         
         // 상태 초기화
         setParticipants([])
-        setCurrentRound(1)
+        setCurrentRound(0)  // 새 모임 시작 시 완료된 라운드는 0
         setName('')
         setGender('male')
         setMbti('extrovert')
@@ -573,9 +612,22 @@ export default function Home() {
         {/* 헤더 섹션 - 제목과 초기화 버튼 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-800">
-              모임 자리 배치 프로그램
-            </h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">
+                모임 자리 배치 프로그램
+              </h1>
+              {currentMeeting && (
+                <div className="mt-2 flex items-center">
+                  <span className="text-lg text-gray-600">📋</span>
+                  <span className="ml-2 text-lg font-medium text-blue-700">
+                    {currentMeeting.name}
+                  </span>
+                  <span className="ml-2 text-sm text-gray-500">
+                    ({currentRound}라운드 완료)
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="flex items-center space-x-4">
               {participants.length > 0 && (
                 <div className="text-right">
@@ -934,14 +986,14 @@ export default function Home() {
                       <>
                         <h3 className="text-lg font-medium text-green-200">배치 완료</h3>
                         <div className="text-3xl font-bold bg-gradient-to-r from-green-300 to-emerald-300 bg-clip-text text-transparent">
-                          {currentRound - 1}라운드 배치 완료
+                          {currentRound}라운드 배치 완료
                         </div>
                       </>
                     ) : (
                       <>
                         <h3 className="text-lg font-medium text-blue-100">배치 준비</h3>
                         <div className="text-3xl font-bold bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
-                          {currentRound}라운드 배치 전
+                          {currentRound + 1}라운드 배치 전
                         </div>
                       </>
                     )}

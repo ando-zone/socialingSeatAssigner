@@ -111,7 +111,7 @@ export const createMeeting = async (name: string, userId: string): Promise<Meeti
       .insert({
         user_id: userId,
         name,
-        current_round: 1
+        current_round: 0  // 아직 완료된 라운드가 없으므로 0으로 시작
       })
       .select()
       .single()
@@ -145,6 +145,40 @@ export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
   }
 }
 
+export const getCurrentMeeting = async (): Promise<Meeting | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return null
+  
+  // Supabase가 설정되지 않은 경우 (개발 모드)
+  if (!isSupabaseConfigured) {
+    return {
+      id: meetingId,
+      name: '로컬 모임',
+      user_id: 'local-user',
+      current_round: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return null
+  
+  try {
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('id', meetingId)
+      .single()
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('현재 모임 조회 중 오류:', error)
+    return null
+  }
+}
+
 export const updateMeetingRound = async (meetingId: string, round: number): Promise<boolean> => {
   const supabase = createSupabaseClient()
   if (!supabase) return false
@@ -162,6 +196,61 @@ export const updateMeetingRound = async (meetingId: string, round: number): Prom
     return true
   } catch (error) {
     console.error('모임 라운드 업데이트 중 오류:', error)
+    return false
+  }
+}
+
+export const deleteMeeting = async (meetingId: string, userId: string): Promise<boolean> => {
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 모임 삭제 시작:', meetingId)
+    
+    // 해당 모임이 사용자 소유인지 확인
+    const { data: meeting, error: fetchError } = await supabase
+      .from('meetings')
+      .select('user_id')
+      .eq('id', meetingId)
+      .single()
+    
+    if (fetchError) throw fetchError
+    
+    if (meeting.user_id !== userId) {
+      console.error('❌ 권한 없음: 다른 사용자의 모임입니다')
+      return false
+    }
+    
+    // 관련 데이터들을 순서대로 삭제 (FK 제약 조건 고려)
+    console.log('🗑️ 스냅샷 삭제 중...')
+    await supabase.from('snapshots').delete().eq('meeting_id', meetingId)
+    
+    console.log('🗑️ 참가자 삭제 중...')
+    await supabase.from('participants').delete().eq('meeting_id', meetingId)
+    
+    console.log('🗑️ 그룹 배치 결과 삭제 중...')
+    await supabase.from('grouping_results').delete().eq('meeting_id', meetingId)
+    
+    console.log('🗑️ 그룹 설정 삭제 중...')
+    await supabase.from('group_settings').delete().eq('meeting_id', meetingId)
+    
+    console.log('🗑️ 이탈 참가자 삭제 중...')
+    await supabase.from('exited_participants').delete().eq('meeting_id', meetingId)
+    
+    // 마지막으로 모임 자체 삭제
+    console.log('🗑️ 모임 삭제 중...')
+    const { error: deleteError } = await supabase
+      .from('meetings')
+      .delete()
+      .eq('id', meetingId)
+      .eq('user_id', userId) // 이중 보안
+    
+    if (deleteError) throw deleteError
+    
+    console.log('✅ 모임 삭제 완료:', meetingId)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 삭제 중 오류:', error)
     return false
   }
 }

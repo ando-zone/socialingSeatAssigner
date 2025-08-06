@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import type { GroupingResult, Participant } from '@/utils/grouping'
 import { migrateParticipantData } from '@/utils/grouping'
 import { createSnapshot } from '@/utils/backup'
+import { meetingStorage } from '@/utils/meeting-storage'
+import { getCurrentMeeting, type Meeting } from '@/utils/database'
 import SeatingChart from '@/components/SeatingChart'
 
 export default function ResultPage() {
@@ -30,29 +32,42 @@ export default function ResultPage() {
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })
+  const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null)
 
   useEffect(() => {
-    const storedResult = localStorage.getItem('groupingResult')
-    const storedParticipants = localStorage.getItem('participants')
-    const storedExitedParticipants = localStorage.getItem('exitedParticipants')
+    const loadCurrentMeeting = async () => {
+      try {
+        const meeting = await getCurrentMeeting()
+        setCurrentMeeting(meeting)
+      } catch (error) {
+        console.error('현재 모임 정보 로드 중 오류:', error)
+        setCurrentMeeting(null)
+      }
+    }
     
-    if (storedResult && storedParticipants) {
-      const result = JSON.parse(storedResult)
-      const participants = JSON.parse(storedParticipants)
+    loadCurrentMeeting()
+    
+    const storedResult = meetingStorage.getGroupingResult()
+    const storedParticipants = meetingStorage.getParticipants()
+    const storedExitedParticipants = meetingStorage.getExitedParticipants()
+    
+    if (storedResult && storedParticipants && storedParticipants.length > 0) {
+      const result = storedResult
+      const participants = storedParticipants
       
       // 이탈한 사람들 정보 로드
       if (storedExitedParticipants) {
-        setExitedParticipants(JSON.parse(storedExitedParticipants))
+        setExitedParticipants(storedExitedParticipants)
       }
       
       // 데이터 마이그레이션 적용
-      const migratedParticipants = migrateParticipantData(participants, result.round || 1)
+      const migratedParticipants = migrateParticipantData(participants, (result as any).round || 1)
       
       setResult(result)
       setParticipants(migratedParticipants)
       
-      // 마이그레이션된 데이터를 localStorage에 저장
-      localStorage.setItem('participants', JSON.stringify(migratedParticipants))
+      // 마이그레이션된 데이터를 모임별 저장
+      meetingStorage.setParticipants(migratedParticipants)
     } else {
       router.push('/')
     }
@@ -286,11 +301,11 @@ export default function ResultPage() {
     setParticipants(updatedParticipants)
 
     // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    meetingStorage.setGroupingResult(fullyUpdatedResult)
+    meetingStorage.setParticipants(updatedParticipants)
 
     // 참가자 추가 시 스냅샷 생성
-    createSnapshot('participant_add_result', `그룹 ${groupId}에 ${participant.name} 추가`)
+            createSnapshot('participant_add_result', `그룹 ${groupId}에 ${participant.name} 추가`)
 
     // 폼 초기화
     setNewParticipant({ name: '', gender: 'male', mbti: 'extrovert' })
@@ -348,8 +363,8 @@ export default function ResultPage() {
     setParticipants(updatedParticipants)
 
     // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    meetingStorage.setGroupingResult(fullyUpdatedResult)
+    meetingStorage.setParticipants(updatedParticipants)
 
     // 스냅샷 생성
     const { createSnapshot } = await import('@/utils/backup')
@@ -404,9 +419,9 @@ export default function ResultPage() {
     setExitedParticipants(updatedExitedParticipants)
 
     // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
-    localStorage.setItem('exitedParticipants', JSON.stringify(updatedExitedParticipants))
+    meetingStorage.setGroupingResult(fullyUpdatedResult)
+    meetingStorage.setParticipants(updatedParticipants)
+    meetingStorage.setExitedParticipants(updatedExitedParticipants)
 
     // DB 저장 시도
     try {
@@ -541,8 +556,8 @@ export default function ResultPage() {
     setParticipants(updatedParticipants)
     
     // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    meetingStorage.setGroupingResult(fullyUpdatedResult)
+    meetingStorage.setParticipants(updatedParticipants)
 
     // 성공 메시지 표시
     const p1Name = result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)?.name
@@ -681,6 +696,14 @@ export default function ResultPage() {
         </div>
 
         <div className="text-center mb-8">
+          {currentMeeting && (
+            <div className="mb-4 flex items-center justify-center">
+              <span className="text-lg text-gray-600">📋</span>
+              <span className="ml-2 text-xl font-medium text-blue-700">
+                {currentMeeting.name}
+              </span>
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
             {result.round}라운드 그룹 배치 결과
           </h1>
@@ -820,9 +843,9 @@ export default function ResultPage() {
           {result.groups.filter(group => group.members.length > 0).map((group) => (
             <div key={group.id} className="bg-white rounded-lg shadow-md p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">
-                  그룹 {group.id}
-                </h3>
+                                  <h3 className="text-lg font-semibold text-gray-800">
+                    그룹 {group.id}
+                  </h3>
                 <span className="text-sm text-gray-500">
                   {group.members.length}명
                 </span>
@@ -1178,7 +1201,7 @@ export default function ResultPage() {
                 
                 // 이성 만남 계산 - 이탈한 사람도 포함해서 계산
                 // localStorage에서 직접 읽어서 최신 상태 보장
-                const currentExitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+                const currentExitedParticipants = meetingStorage.getExitedParticipants() || {} as Record<string, {name: string, gender: 'male' | 'female'}>
                 
                 const oppositeMet = Array.from(allMetIds).filter(metId => {
                   const metPerson = participants.find(p => p.id === metId)
@@ -1188,7 +1211,7 @@ export default function ResultPage() {
                     return isOpposite
                   }
                   // 이탈한 사람의 경우 저장된 정보 사용
-                  const exitedPerson = currentExitedParticipants[metId]
+                  const exitedPerson = (currentExitedParticipants as any)[metId]
                   if (exitedPerson) {
                     const isOpposite = exitedPerson.gender !== participant.gender
                     return isOpposite
@@ -1565,11 +1588,12 @@ export default function ResultPage() {
             </button>
             <button
               onClick={() => {
-                localStorage.removeItem('groupingResult')
-                localStorage.removeItem('participants')
-                localStorage.removeItem('currentRound')
-                localStorage.removeItem('exitedParticipants')
-                localStorage.removeItem('groupSettings')
+                // 모임별 데이터 제거
+                meetingStorage.setGroupingResult(null)
+                meetingStorage.setParticipants([])
+                meetingStorage.setCurrentRound(0)
+                meetingStorage.setExitedParticipants({})
+                meetingStorage.setGroupSettings({})
                 router.push('/')
               }}
               className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"
