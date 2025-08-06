@@ -262,7 +262,7 @@ export default function Auth({ children }: AuthProps) {
     setMessage('')
 
     try {
-      console.log('🔄 Sending password reset email to:', resetEmail)
+      console.log('🔄 Sending password reset email...')
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`
       })

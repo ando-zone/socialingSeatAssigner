@@ -19,10 +19,10 @@ function AuthCallbackContent() {
           return
         }
 
-        // 디버깅: 모든 URL 파라미터 로깅
-        const allParams = Object.fromEntries(searchParams.entries())
-        console.log('🔍 Auth callback URL params:', allParams)
-        console.log('🔍 Full URL:', window.location.href)
+        // 개발 환경에서만 디버깅 정보 출력
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Auth callback processing...')
+        }
 
         // URL에서 에러 파라미터 확인
         const errorParam = searchParams.get('error')
@@ -30,7 +30,9 @@ function AuthCallbackContent() {
         const errorDescription = searchParams.get('error_description')
 
         if (errorParam) {
-          console.log('❌ Error detected:', { errorParam, errorCode, errorDescription })
+          if (process.env.NODE_ENV === 'development') {
+            console.log('❌ Auth error detected:', { errorParam, errorCode })
+          }
           let errorMessage = '인증 처리 중 오류가 발생했습니다.'
           
           if (errorCode === 'otp_expired') {
@@ -54,11 +56,15 @@ function AuthCallbackContent() {
         const access_token = searchParams.get('access_token')
         const refresh_token = searchParams.get('refresh_token')
 
-        console.log('🔍 Auth tokens:', { code, type, hasAccessToken: !!access_token, hasRefreshToken: !!refresh_token })
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Auth tokens found:', { hasCode: !!code, type, hasTokens: !!(access_token && refresh_token) })
+        }
 
         // 비밀번호 재설정인 경우
         if (type === 'recovery' || (access_token && refresh_token)) {
-          console.log('🔄 Redirecting to reset password page')
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔄 Redirecting to reset password page')
+          }
           const params = new URLSearchParams()
           if (access_token) params.set('access_token', access_token)
           if (refresh_token) params.set('refresh_token', refresh_token)
