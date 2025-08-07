@@ -34,7 +34,7 @@ export default function Auth({ children }: AuthProps) {
             <div className="flex items-center space-x-2 text-yellow-800">
               <span>⚠️</span>
               <span className="text-sm">
-                <strong>개발 모드:</strong> Supabase가 설정되지 않았습니다. localStorage를 사용합니다.
+                <strong>오류:</strong> Supabase가 설정되지 않았습니다. 앱이 정상 작동하지 않습니다.
               </span>
             </div>
           </div>
@@ -149,29 +149,13 @@ export default function Auth({ children }: AuthProps) {
                 getExitedParticipants()
               ])
               
-              // 로컬스토리지에 동기화
-              if (participants.length > 0) {
-                localStorage.setItem('participants', JSON.stringify(participants))
-                console.log('✅ 참가자 데이터 동기화 완료:', participants.length + '명')
-              }
-              
-              if (groupingResult) {
-                localStorage.setItem('groupingResult', JSON.stringify(groupingResult))
-                localStorage.setItem('currentRound', String(groupingResult.round + 1))
-                console.log('✅ 그룹 결과 동기화 완료: ' + groupingResult.round + '라운드')
-              } else {
-                localStorage.setItem('currentRound', String(latestMeeting.current_round))
-              }
-              
-              if (groupSettings) {
-                localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
-                console.log('✅ 그룹 설정 동기화 완료')
-              }
-              
-              if (Object.keys(exitedParticipants).length > 0) {
-                localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
-                console.log('✅ 이탈 참가자 동기화 완료')
-              }
+              // 데이터 동기화 완료
+              console.log('✅ 모임 데이터 로드 완료:', {
+                participantCount: participants.length,
+                currentRound: groupingResult ? groupingResult.round + 1 : latestMeeting.current_round,
+                hasGroupSettings: !!groupSettings,
+                exitedParticipantCount: Object.keys(exitedParticipants).length
+              })
               
               console.log('🎉 모든 데이터 동기화 완료!')
               

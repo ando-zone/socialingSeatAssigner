@@ -60,45 +60,21 @@ let currentMeetingId: string | null = null
 
 export const setCurrentMeetingId = (meetingId: string) => {
   currentMeetingId = meetingId
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('currentMeetingId', meetingId)
-  }
 }
 
 export const getCurrentMeetingId = (): string | null => {
-  if (currentMeetingId) return currentMeetingId
-  
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('currentMeetingId')
-    if (stored) {
-      currentMeetingId = stored
-      return stored
-    }
-    
-    // 개발 모드(Supabase 미설정)에서 임시 모임 ID 자동 생성
-    if (!isSupabaseConfigured) {
-      const tempMeetingId = `temp-meeting-${Date.now()}`
-      console.log('🔧 개발 모드: 임시 모임 ID 생성됨:', tempMeetingId)
-      setCurrentMeetingId(tempMeetingId)
-      return tempMeetingId
-    }
-  }
-  
-  return null
+  return currentMeetingId
 }
 
 export const clearCurrentMeetingId = () => {
   currentMeetingId = null
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('currentMeetingId')
-  }
 }
 
 // ===== 모임(Meeting) 관련 함수들 =====
 
 export const createMeeting = async (name: string, userId: string): Promise<Meeting | null> => {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase가 설정되지 않았습니다. localStorage 모드에서는 모임 생성이 불가능합니다.')
+    console.error('Supabase가 설정되지 않았습니다. 모임 생성이 불가능합니다.')
     return null
   }
 
@@ -287,14 +263,20 @@ export const getGroupingResult = async (): Promise<GroupingResult | null> => {
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
 
     if (error) throw error
 
+    // 데이터가 없으면 null 반환 (그룹 배치가 아직 안 된 경우)
+    if (!data || data.length === 0) {
+      console.log('그룹 배치 결과가 없습니다.')
+      return null
+    }
+
+    const result = data[0]
     return {
-      groups: data.groups,
-      round: data.round,
-      summary: data.summary
+      groups: result.groups,
+      round: result.round,
+      summary: result.summary
     }
   } catch (error) {
     console.error('그룹 배치 결과 조회 중 오류:', error)
@@ -430,15 +412,21 @@ export const getGroupSettings = async (): Promise<{
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
 
     if (error) throw error
 
+    // 데이터가 없으면 null 반환 (새로운 모임의 경우)
+    if (!data || data.length === 0) {
+      console.log('그룹 설정이 없습니다. 기본값을 사용합니다.')
+      return null
+    }
+
+    const settings = data[0]
     return {
-      groupingMode: data.grouping_mode,
-      groupSize: data.group_size,
-      numGroups: data.num_groups,
-      customGroupSizes: data.custom_group_sizes
+      groupingMode: settings.grouping_mode,
+      groupSize: settings.group_size,
+      numGroups: settings.num_groups,
+      customGroupSizes: settings.custom_group_sizes
     }
   } catch (error) {
     console.error('그룹 설정 조회 중 오류:', error)
@@ -523,10 +511,16 @@ export const restoreFromSnapshot = async (snapshotId: number): Promise<any | nul
       .select('*')
       .eq('meeting_id', meetingId)
       .eq('snapshot_id', snapshotId)
-      .single()
+      .limit(1)
 
     if (error) throw error
-    return data.data
+    
+    if (!data || data.length === 0) {
+      console.log('해당 스냅샷을 찾을 수 없습니다:', snapshotId)
+      return null
+    }
+    
+    return data[0].data
   } catch (error) {
     console.error('스냅샷 복원 중 오류:', error)
     return null
