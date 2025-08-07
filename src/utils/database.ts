@@ -87,6 +87,25 @@ export const getCurrentMeetingId = (): string | null => {
   return null
 }
 
+// 앱 시작 시 즉시 모임 ID 초기화하는 함수
+export const initializeMeetingId = (): string | null => {
+  if (typeof window === 'undefined') return null
+  
+  // 이미 설정된 모임 ID가 있으면 사용
+  const existingId = getCurrentMeetingId()
+  if (existingId) return existingId
+  
+  // 개발 모드에서는 즉시 임시 모임 ID 생성
+  if (!isSupabaseConfigured) {
+    const tempMeetingId = `temp-meeting-${Date.now()}`
+    console.log('🔧 개발 모드: 앱 시작 시 임시 모임 ID 생성:', tempMeetingId)
+    setCurrentMeetingId(tempMeetingId)
+    return tempMeetingId
+  }
+  
+  return null
+}
+
 export const clearCurrentMeetingId = () => {
   currentMeetingId = null
   if (typeof window !== 'undefined') {

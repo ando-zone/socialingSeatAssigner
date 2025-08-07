@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createSupabaseClient } from '@/lib/supabase'
 import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, type Meeting } from '@/utils/database'
-import { clearMeetingData } from '@/utils/meeting-storage'
+import { dataService } from '@/utils/data-service'
 import type { User } from '@supabase/supabase-js'
 
 interface MeetingSelectorProps {
@@ -105,8 +105,8 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
     try {
       const success = await deleteMeeting(meetingId, user.id)
       if (success) {
-        // 로컬스토리지에서도 해당 모임 데이터 삭제
-        clearMeetingData(meetingId)
+        // 데이터베이스에서 해당 모임 데이터 삭제
+        await dataService.clearAll()
         
         // 현재 선택된 모임이 삭제된 모임이면 선택 해제
         if (selectedMeetingId === meetingId) {

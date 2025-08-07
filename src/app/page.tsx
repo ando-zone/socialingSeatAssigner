@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult } from '@/utils/grouping'
 import { createSnapshot, exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, formatDateTime } from '@/utils/backup'
-import { meetingStorage } from '@/utils/meeting-storage'
+import { 
+  participantService, 
+  groupingResultService, 
+  roundService, 
+  groupSettingsService,
+  exitedParticipantService,
+  dataService 
+} from '@/utils/data-service'
 import { getCurrentMeeting, type Meeting } from '@/utils/database'
 
 export default function Home() {
@@ -30,82 +37,47 @@ export default function Home() {
 
   const addParticipant = async () => {
     if (name.trim()) {
-      const newParticipant: Participant = {
-        id: Date.now().toString(),
-        name: name.trim(),
-        gender,
-        mbti,
-        meetingsByRound: {},
-        allMetPeople: [],
-        groupHistory: []
-      }
-      const updatedParticipants = [...participants, newParticipant]
-      
-      // 즉시 모임별 저장 (스냅샷 생성 전에)
-      meetingStorage.setParticipants(updatedParticipants)
-      
-      // 상태 업데이트
-      setParticipants(updatedParticipants)
-      setName('')
-      
-      // 참가자 추가 시 스냅샷 생성 (localStorage 저장 후)
       try {
-        await createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
-        console.log(`✅ 참가자 추가 스냅샷 생성 완료: ${newParticipant.name}`)
-        
-        // DB 저장 시도
-        try {
-          const { saveParticipants } = await import('@/utils/database')
-          await saveParticipants(updatedParticipants)
-          console.log('✅ 참가자 DB 저장 성공')
-        } catch (error) {
-          console.warn('⚠️ 참가자 DB 저장 실패 (로컬은 정상):', error)
+        const newParticipant: Participant = {
+          id: Date.now().toString(),
+          name: name.trim(),
+          gender,
+          mbti,
+          meetingsByRound: {},
+          allMetPeople: [],
+          groupHistory: []
         }
+        
+        // data-service를 사용하여 추가
+        const updatedParticipants = await participantService.add(newParticipant)
+        
+        // 상태 업데이트
+        setParticipants(updatedParticipants)
+        setName('')
+        
+        console.log(`✅ 참가자 추가 완료: ${newParticipant.name}`)
       } catch (error) {
-        console.error('❌ 스냅샷 생성 실패:', error)
+        console.error('❌ 참가자 추가 실패:', error)
+        alert('참가자 추가 중 오류가 발생했습니다.')
       }
     }
   }
 
   const removeParticipant = async (id: string) => {
-    const participantToRemove = participants.find(p => p.id === id)
-    const updatedParticipants = participants.filter(p => p.id !== id)
-    
-    // 즉시 모임별 저장 (스냅샷 생성 전에)
-    meetingStorage.setParticipants(updatedParticipants)
-    
-    if (participantToRemove) {
-      // 이탈한 사람 정보를 모임별 저장
-      const exitedParticipants: Record<string, { name: string; gender: 'male' | 'female' }> = meetingStorage.getExitedParticipants() || {}
-      exitedParticipants[id] = {
-        name: participantToRemove.name,
-        gender: participantToRemove.gender
-      }
-      meetingStorage.setExitedParticipants(exitedParticipants)
+    try {
+      // data-service를 사용하여 제거
+      const result = await participantService.remove(id)
       
-      // 참가자 제거 시 스냅샷 생성 (localStorage 저장 후)
-      try {
-        await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
-        console.log(`✅ 참가자 제거 스냅샷 생성 완료: ${participantToRemove.name}`)
-        
-        // DB 저장 시도
-        try {
-          const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
-          await Promise.all([
-            saveParticipants(updatedParticipants),
-            saveExitedParticipants(exitedParticipants)
-          ])
-          console.log('✅ 참가자 제거 DB 저장 성공')
-        } catch (error) {
-          console.warn('⚠️ 참가자 제거 DB 저장 실패 (로컬은 정상):', error)
-        }
-      } catch (error) {
-        console.error('❌ 스냅샷 생성 실패:', error)
+      // 상태 업데이트
+      setParticipants(result.participants)
+      
+      if (result.removedParticipant) {
+        console.log(`✅ 참가자 제거 완료: ${result.removedParticipant.name}`)
       }
+    } catch (error) {
+      console.error('❌ 참가자 제거 실패:', error)
+      alert('참가자 제거 중 오류가 발생했습니다.')
     }
-    
-    // 상태 업데이트
-    setParticipants(updatedParticipants)
   }
 
   // 그룹 수 변경 시 customGroupSizes 배열 크기 조정
@@ -172,53 +144,29 @@ export default function Home() {
       
       const nextRound = currentRound + 1
       
-      // 모임별 저장
-      meetingStorage.setGroupingResult(result)
-      meetingStorage.setParticipants(updatedParticipants)
-      meetingStorage.setCurrentRound(nextRound)
-      
-      // 그룹 설정 저장
+      // data-service를 사용한 저장
       const groupSettings = {
         groupingMode,
         groupSize,
         numGroups,
         customGroupSizes
       }
-      meetingStorage.setGroupSettings(groupSettings)
       
-      // 데이터베이스 저장 시도
-      const meetingId = getCurrentMeetingId()
-      if (meetingId) {
-        try {
-          console.log('🔄 데이터베이스 동기화 시작...')
-          
-          // 병렬로 DB 저장 실행
-          // current_round는 완료된 라운드 번호로 저장 (nextRound - 1 = currentRound)
-          const savePromises = [
-            updateMeetingRound(meetingId, currentRound),
-            saveParticipants(updatedParticipants),
-            saveGroupingResult(result),
-            saveGroupSettings(groupSettings)
-          ]
-          
-          const results = await Promise.allSettled(savePromises)
-          
-          // 저장 결과 확인
-          results.forEach((result, index) => {
-            const operations = ['라운드 업데이트', '참가자 저장', '그룹 결과 저장', '그룹 설정 저장']
-            if (result.status === 'fulfilled' && result.value) {
-              console.log(`✅ ${operations[index]} 성공`)
-            } else {
-              console.warn(`⚠️ ${operations[index]} 실패:`, result.status === 'rejected' ? result.reason : '결과가 false')
-            }
-          })
-          
-          console.log('💾 데이터베이스 동기화 완료')
-        } catch (dbError) {
-          console.warn('⚠️ 데이터베이스 저장 중 오류 (로컬은 정상):', dbError)
-        }
-      } else {
-        console.log('ℹ️ 활성 모임이 없어 로컬스토리지만 사용')
+      try {
+        console.log('🔄 데이터 저장 시작...')
+        
+        // 병렬로 저장 실행
+        await Promise.all([
+          groupingResultService.save(result),
+          participantService.save(updatedParticipants),
+          roundService.save(nextRound),
+          groupSettingsService.save(groupSettings)
+        ])
+        
+        console.log('✅ 모든 데이터 저장 완료')
+      } catch (error) {
+        console.error('❌ 데이터 저장 실패:', error)
+        throw error // 에러를 다시 던져서 상위에서 처리
       }
       
       // 결과가 생성되었음을 표시
@@ -242,6 +190,13 @@ export default function Home() {
   useEffect(() => {
     // 클라이언트에서만 실행
     if (typeof window === 'undefined') return
+    
+    // 먼저 모임 ID 초기화 (개발 모드에서 즉시 임시 ID 생성)
+    const initializeMeetingIdFirst = async () => {
+      const { initializeMeetingId } = await import('@/utils/database')
+      initializeMeetingId()
+    }
+    initializeMeetingIdFirst()
     
     // URL에서 모임 ID 확인
     const checkUrlMeetingId = async () => {
@@ -284,51 +239,68 @@ export default function Home() {
     // 클라이언트임을 표시
     setIsClient(true)
     
-    const storedParticipants = meetingStorage.getParticipants()
-    const storedRound = meetingStorage.getCurrentRound()
-    const storedGroupSettings = meetingStorage.getGroupSettings()
-    const storedResult = meetingStorage.getGroupingResult()
-    
-    // 기존 결과가 있는지 확인
-    setHasExistingResult(!!storedResult)
-    
-    if (storedParticipants && storedParticipants.length > 0) {
-      const participants = storedParticipants
-      const currentRound = storedRound || 0  // 초기값을 0으로 변경 (아직 완료된 라운드 없음)
-      
-      // 데이터 마이그레이션 적용
-      const migratedParticipants = migrateParticipantData(participants, currentRound)
-      
-      setParticipants(migratedParticipants)
-      
-      // 마이그레이션된 데이터를 모임별 저장
-      meetingStorage.setParticipants(migratedParticipants)
-    }
-    if (storedRound) {
-      setCurrentRound(storedRound)
-    }
-    
-    // 그룹 설정 복원
-    if (storedGroupSettings && Object.keys(storedGroupSettings).length > 0) {
+    // data-service를 사용한 데이터 로딩
+    const loadData = async () => {
       try {
-        const settings = storedGroupSettings as any
-        console.log('저장된 그룹 설정 복원:', settings)
-        if (settings.groupingMode) setGroupingMode(settings.groupingMode)
-        if (settings.groupSize) setGroupSize(settings.groupSize)
-        if (settings.numGroups) setNumGroups(settings.numGroups)
-        if (settings.customGroupSizes) setCustomGroupSizes(settings.customGroupSizes)
+        console.log('🔄 초기 데이터 로딩 시작...')
+        
+        const [storedParticipants, storedRound, storedGroupSettings, storedResult] = await Promise.all([
+          participantService.get(),
+          roundService.get(),
+          groupSettingsService.get(),
+          groupingResultService.get()
+        ])
+        
+        // 기존 결과가 있는지 확인
+        setHasExistingResult(!!storedResult)
+        
+        if (storedParticipants && storedParticipants.length > 0) {
+          const currentRound = storedRound || 0
+          
+          // 데이터 마이그레이션 적용
+          const migratedParticipants = migrateParticipantData(storedParticipants, currentRound)
+          
+          setParticipants(migratedParticipants)
+          
+          // 마이그레이션된 데이터를 다시 저장
+          if (migratedParticipants !== storedParticipants) {
+            await participantService.save(migratedParticipants)
+          }
+        }
+        
+        if (storedRound) {
+          setCurrentRound(storedRound)
+        }
+        
+        // 그룹 설정 복원
+        if (storedGroupSettings && Object.keys(storedGroupSettings).length > 0) {
+          try {
+            const settings = storedGroupSettings as any
+            console.log('저장된 그룹 설정 복원:', settings)
+            if (settings.groupingMode) setGroupingMode(settings.groupingMode)
+            if (settings.groupSize) setGroupSize(settings.groupSize)
+            if (settings.numGroups) setNumGroups(settings.numGroups)
+            if (settings.customGroupSizes) setCustomGroupSizes(settings.customGroupSizes)
+          } catch (error) {
+            console.error('그룹 설정 복원 중 오류:', error)
+          }
+        } else {
+          console.log('저장된 그룹 설정이 없습니다.')
+        }
+        
+        console.log('✅ 초기 데이터 로딩 완료')
       } catch (error) {
-        console.error('그룹 설정 복원 중 오류:', error)
+        console.error('❌ 초기 데이터 로딩 실패:', error)
       }
-    } else {
-      console.log('저장된 그룹 설정이 없습니다.')
     }
+    
+    loadData()
     
     // 초기 로드 완료 표시
     setIsInitialLoad(false)
   }, [])
 
-  // 그룹 설정 변경 시 모임별 저장 (초기 로드 후에만)
+  // 그룹 설정 변경 시 저장 (초기 로드 후에만)
   useEffect(() => {
     if (!isInitialLoad) {
       const groupSettings = {
@@ -337,8 +309,17 @@ export default function Home() {
         numGroups,
         customGroupSizes
       }
-      meetingStorage.setGroupSettings(groupSettings)
-      console.log('그룹 설정 저장됨:', groupSettings)
+      
+      const saveSettings = async () => {
+        try {
+          await groupSettingsService.save(groupSettings)
+          console.log('그룹 설정 저장됨:', groupSettings)
+        } catch (error) {
+          console.error('그룹 설정 저장 실패:', error)
+        }
+      }
+      
+      saveSettings()
     }
   }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
 
@@ -410,31 +391,23 @@ export default function Home() {
     })
 
     if (newParticipants.length > 0) {
-      const updatedParticipants = [...participants, ...newParticipants]
-      
-      // 즉시 모임별 저장 (스냅샷 생성 전에)
-      meetingStorage.setParticipants(updatedParticipants)
-      
-      // 상태 업데이트
-      setParticipants(updatedParticipants)
-      setBulkText('')
-      setShowBulkInput(false)
-      
-      // 벌크 추가 시 스냅샷 생성 (localStorage 저장 후)
       try {
-        await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
-        console.log(`✅ 벌크 추가 스냅샷 생성 완료: ${newParticipants.length}명`)
+        const updatedParticipants = [...participants, ...newParticipants]
         
-        // DB 저장 시도
-        try {
-          const { saveParticipants } = await import('@/utils/database')
-          await saveParticipants(updatedParticipants)
-          console.log('✅ 벌크 추가 DB 저장 성공')
-        } catch (error) {
-          console.warn('⚠️ 벌크 추가 DB 저장 실패 (로컬은 정상):', error)
-        }
+        // data-service를 사용하여 저장
+        await participantService.save(updatedParticipants)
+        
+        // 상태 업데이트
+        setParticipants(updatedParticipants)
+        setBulkText('')
+        setShowBulkInput(false)
+        
+        // 벌크 추가 시 스냅샷 생성
+        await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
+        console.log(`✅ 벌크 추가 완료: ${newParticipants.length}명`)
       } catch (error) {
-        console.error('❌ 스냅샷 생성 실패:', error)
+        console.error('❌ 벌크 추가 실패:', error)
+        alert('벌크 추가 중 오류가 발생했습니다.')
       }
     }
   }
@@ -453,19 +426,31 @@ export default function Home() {
       
       // 가져온 데이터로 상태 직접 업데이트 (새로고침 없이)
       if (typeof window !== 'undefined') {
-        const importedParticipants = meetingStorage.getParticipants() || []
-        const importedGroupingResult = meetingStorage.getGroupingResult()
-        const importedCurrentRound = meetingStorage.getCurrentRound() || 0
-        const importedExitedParticipants = meetingStorage.getExitedParticipants() || {}
-        const importedGroupSettings = meetingStorage.getGroupSettings() || {}
-        
-        // 상태 직접 업데이트
-        setParticipants(importedParticipants)
-        setCurrentRound(importedCurrentRound)
-        setHasExistingResult(!!importedGroupingResult)
-        
-        // 스냅샷 목록도 새로고침
-        refreshSnapshots()
+        try {
+          const [
+            importedParticipants,
+            importedGroupingResult,
+            importedCurrentRound,
+            importedExitedParticipants,
+            importedGroupSettings
+          ] = await Promise.all([
+            participantService.get(),
+            groupingResultService.get(),
+            roundService.get(),
+            exitedParticipantService.get(),
+            groupSettingsService.get()
+          ])
+          
+          // 상태 직접 업데이트
+          setParticipants(importedParticipants || [])
+          setCurrentRound(importedCurrentRound || 0)
+          setHasExistingResult(!!importedGroupingResult)
+          
+          // 스냅샷 목록도 새로고침
+          refreshSnapshots()
+        } catch (error) {
+          console.error('가져온 데이터 로딩 실패:', error)
+        }
       }
       
       alert('데이터를 성공적으로 가져왔습니다!')
@@ -488,19 +473,31 @@ export default function Home() {
           
           // 복원된 데이터로 상태 직접 업데이트 (새로고침 없이)
           if (typeof window !== 'undefined') {
-            const restoredParticipants = meetingStorage.getParticipants() || []
-            const restoredGroupingResult = meetingStorage.getGroupingResult()
-            const restoredCurrentRound = meetingStorage.getCurrentRound() || 0
-            const restoredExitedParticipants = meetingStorage.getExitedParticipants() || {}
-            const restoredGroupSettings = meetingStorage.getGroupSettings() || {}
-            
-            // 상태 직접 업데이트
-            setParticipants(restoredParticipants)
-            setCurrentRound(restoredCurrentRound)
-            setHasExistingResult(!!restoredGroupingResult)
-            
-            // 스냅샷 목록도 새로고침
-            refreshSnapshots()
+            try {
+              const [
+                restoredParticipants,
+                restoredGroupingResult,
+                restoredCurrentRound,
+                restoredExitedParticipants,
+                restoredGroupSettings
+              ] = await Promise.all([
+                participantService.get(),
+                groupingResultService.get(),
+                roundService.get(),
+                exitedParticipantService.get(),
+                groupSettingsService.get()
+              ])
+              
+              // 상태 직접 업데이트
+              setParticipants(restoredParticipants || [])
+              setCurrentRound(restoredCurrentRound || 0)
+              setHasExistingResult(!!restoredGroupingResult)
+              
+              // 스냅샷 목록도 새로고침
+              refreshSnapshots()
+            } catch (error) {
+              console.error('복원된 데이터 로딩 실패:', error)
+            }
           }
           
           alert('✅ 복원이 완료되었습니다!')
@@ -556,7 +553,7 @@ export default function Home() {
 
 
   // 새로운 모임 시작 함수
-  const handleNewMeeting = () => {
+  const handleNewMeeting = async () => {
     const confirmMessage = `🎉 새로운 모임을 시작하시겠습니까?
 
 다음 데이터가 초기화됩니다:
@@ -569,12 +566,8 @@ export default function Home() {
 
     if (confirm(confirmMessage)) {
       try {
-        // 현재 모임의 데이터만 삭제 (백업은 유지)
-        meetingStorage.setParticipants([])
-        meetingStorage.setCurrentRound(0)
-        meetingStorage.setGroupingResult(null)
-        meetingStorage.setExitedParticipants({})
-        meetingStorage.setGroupSettings({})
+        // data-service를 사용하여 모든 데이터 초기화
+        await dataService.clearAll()
         
         // 상태 초기화
         setParticipants([])
@@ -591,7 +584,6 @@ export default function Home() {
         setShowBackupSection(false)
         setIsInitialLoad(true)
         setHasExistingResult(false)
-        // isClient는 그대로 유지 (이미 클라이언트에서 실행 중이므로)
         
         // 초기화 완료 후 저장 가능하도록 설정
         setTimeout(() => {
@@ -601,7 +593,7 @@ export default function Home() {
         alert('✅ 새로운 모임이 시작되었습니다!')
       } catch (error) {
         console.error('초기화 중 오류 발생:', error)
-        alert('❌ 초기화 중 오류가 발생했습니다. 페이지를 새로고침 해주세요.')
+        alert('❌ 초기화 중 오류가 발생했습니다. 다시 시도해주세요.')
       }
     }
   }

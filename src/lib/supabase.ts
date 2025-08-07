@@ -14,18 +14,28 @@ if (process.env.NODE_ENV === 'development') {
     hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     isConfigured: isSupabaseConfigured
   })
+  
+  // 개발 모드에서도 Supabase 필수로 변경
+  if (!isSupabaseConfigured) {
+    console.error('❌ Supabase 설정이 필요합니다!')
+    console.error('다음 환경 변수를 설정해주세요:')
+    console.error('- NEXT_PUBLIC_SUPABASE_URL')
+    console.error('- NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    throw new Error('Supabase 환경 변수가 설정되지 않았습니다. 앱을 실행하려면 Supabase 설정이 필요합니다.')
+  }
 }
 
-// 클라이언트 사이드용 Supabase 클라이언트
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
+// 클라이언트 사이드용 Supabase 클라이언트 (이제 항상 필수)
+if (!isSupabaseConfigured) {
+  throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // 브라우저 클라이언트용 Supabase 클라이언트
 export const createSupabaseClient = () => {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
-    return null
+    throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.')
   }
   return createBrowserClient(supabaseUrl, supabaseAnonKey)
 }

@@ -1,5 +1,12 @@
 import { saveSnapshot as saveSnapshotToDB } from './database'
-import { meetingStorage } from './meeting-storage'
+import { 
+  participantService,
+  groupingResultService,
+  roundService,
+  exitedParticipantService,
+  groupSettingsService,
+  snapshotService
+} from './data-service'
 
 export interface BackupData {
   participants: any[]
@@ -20,7 +27,7 @@ export interface Snapshot {
 }
 
 // 현재 모든 데이터를 BackupData 형태로 수집
-export function getCurrentData(): BackupData {
+export async function getCurrentData(): Promise<BackupData> {
   if (typeof window === 'undefined') {
     return {
       participants: [],
@@ -33,32 +40,47 @@ export function getCurrentData(): BackupData {
     }
   }
   
-  const participants = meetingStorage.getParticipants() || []
-  const groupingResult = meetingStorage.getGroupingResult()
-  const currentRound = String(meetingStorage.getCurrentRound())
-  const exitedParticipants = meetingStorage.getExitedParticipants() || {}
-  const groupSettings = meetingStorage.getGroupSettings()
+  try {
+    const [participants, groupingResult, currentRound, exitedParticipants, groupSettings] = await Promise.all([
+      participantService.get(),
+      groupingResultService.get(),
+      roundService.get(),
+      exitedParticipantService.get(),
+      groupSettingsService.get()
+    ])
   
-  const data = {
-    participants,
-    groupingResult,
-    currentRound,
-    exitedParticipants,
-    groupSettings,
-    timestamp: new Date().toISOString(),
-    version: '1.0'
+    const data = {
+      participants,
+      groupingResult,
+      currentRound: String(currentRound),
+      exitedParticipants,
+      groupSettings,
+      timestamp: new Date().toISOString(),
+      version: '1.0'
+    }
+    
+    console.log(`📦 스냅샷 데이터 수집:`, {
+      participantCount: participants.length,
+      participantNames: participants.map((p: any) => p.name),
+      currentRound,
+      hasGroupingResult: !!groupingResult,
+      exitedCount: Object.keys(exitedParticipants || {}).length,
+      hasGroupSettings: !!groupSettings
+    })
+    
+    return data
+  } catch (error) {
+    console.error('스냅샷 데이터 수집 실패:', error)
+    return {
+      participants: [],
+      groupingResult: null,
+      currentRound: '1',
+      exitedParticipants: {},
+      groupSettings: null,
+      timestamp: new Date().toISOString(),
+      version: '1.0'
+    }
   }
-  
-  console.log(`📦 스냅샷 데이터 수집:`, {
-    participantCount: participants.length,
-    participantNames: participants.map((p: any) => p.name),
-    currentRound,
-    hasGroupingResult: !!groupingResult,
-    exitedCount: Object.keys(exitedParticipants).length,
-    hasGroupSettings: !!groupSettings
-  })
-  
-  return data
 }
 
 // 스냅샷 생성 (로컬스토리지 + DB 동시 저장)
@@ -67,7 +89,7 @@ export async function createSnapshot(eventType: string, description: string): Pr
   
   const snapshotId = Date.now() % 2147483647  // PostgreSQL integer 범위 내로 제한
   const timestamp = new Date().toISOString()
-  const data = getCurrentData()
+  const data = await getCurrentData()
   
   console.log(`📸 스냅샷 생성 시작:`, {
     id: snapshotId,
@@ -78,8 +100,7 @@ export async function createSnapshot(eventType: string, description: string): Pr
     currentRound: data.currentRound
   })
   
-  // 모임별 로컬스토리지 저장
-  const snapshots = meetingStorage.getSnapshots()  // 모임별 조회
+  // 데이터베이스에 스냅샷 저장
   const snapshot: Snapshot = {
     id: snapshotId,
     timestamp,
@@ -88,19 +109,9 @@ export async function createSnapshot(eventType: string, description: string): Pr
     data
   }
   
-  snapshots.push(snapshot)
+  console.log(`✅ 스냅샷 준비 완료: ${description} (ID: ${snapshotId})`)
   
-  // 최대 50개 스냅샷만 유지 (더 여유있게)
-  if (snapshots.length > 50) {
-    const removed = snapshots.shift()
-    console.log(`🧹 오래된 스냅샷 제거:`, removed?.id)
-  }
-  
-  meetingStorage.setSnapshots(snapshots)
-  console.log(`✅ 로컬 스냅샷 저장 완료: ${description} (ID: ${snapshotId})`)
-  console.log(`📊 현재 로컬 스냅샷 수: ${snapshots.length}개`)
-  
-  // DB 저장 시도 (실패해도 로컬스토리지는 정상 저장됨)
+  // DB 저장 시도
   try {
     const { saveSnapshot } = await import('./database')
     const success = await saveSnapshot(snapshotId, eventType, description, data)
@@ -114,18 +125,12 @@ export async function createSnapshot(eventType: string, description: string): Pr
   }
 }
 
-// 모든 스냅샷 조회 (로컬 + DB 통합)
+// 모든 스냅샷 조회 (DB에서)
 export async function getSnapshots(): Promise<Snapshot[]> {
   if (typeof window === 'undefined') return []
   
-  const localSnapshots = meetingStorage.getSnapshots()
-  console.log(`📋 로컬 스냅샷 조회: ${localSnapshots.length}개 발견`)
-  console.log(`📋 로컬 스냅샷 ID들:`, localSnapshots.map((s: any) => s.id))
-  
-  // DB 스냅샷도 가져오기 시도
   try {
-    const { getSnapshots: getDBSnapshots } = await import('./database')
-    const dbSnapshots = await getDBSnapshots()
+    const dbSnapshots = await snapshotService.get()
     
     console.log(`💾 DB 스냅샷 조회: ${dbSnapshots.length}개 발견`)
     console.log(`💾 DB 스냅샷 원본:`, dbSnapshots.map((s: any) => ({ 
@@ -134,8 +139,8 @@ export async function getSnapshots(): Promise<Snapshot[]> {
       description: s.description 
     })))
     
-    // DB 스냅샷을 로컬 스냅샷 형태로 변환
-    const convertedDBSnapshots = dbSnapshots.map((dbSnapshot: any) => ({
+    // DB 스냅샷을 표준 스냅샷 형태로 변환
+    const convertedSnapshots = dbSnapshots.map((dbSnapshot: any) => ({
       id: dbSnapshot.snapshot_id,
       timestamp: dbSnapshot.timestamp,
       eventType: dbSnapshot.event_type,
@@ -143,37 +148,24 @@ export async function getSnapshots(): Promise<Snapshot[]> {
       data: dbSnapshot.data
     }))
     
-    console.log(`🔄 변환된 DB 스냅샷 ID들:`, convertedDBSnapshots.map((s: any) => s.id))
-    
-    // 중복 제거하고 병합 (id 기준)
-    const allSnapshots = [...localSnapshots]
-    let addedFromDB = 0
-    
-    convertedDBSnapshots.forEach((dbSnapshot: any) => {
-      if (!allSnapshots.find(local => local.id === dbSnapshot.id)) {
-        allSnapshots.push(dbSnapshot)
-        addedFromDB++
-      }
-    })
-    
-    console.log(`🔀 DB에서 추가된 스냅샷: ${addedFromDB}개`)
-    console.log(`📊 통합 스냅샷 총 ${allSnapshots.length}개`)
+    console.log(`🔄 변환된 스냅샷 ID들:`, convertedSnapshots.map((s: any) => s.id))
     
     // 시간순 정렬
-    const sortedSnapshots = allSnapshots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-    console.log(`✅ 최종 스냅샷 ID들:`, sortedSnapshots.map((s: any) => s.id))
+    const sortedSnapshots = convertedSnapshots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    console.log(`✅ 최종 스냅샷 총 ${sortedSnapshots.length}개`)
     
     return sortedSnapshots
   } catch (error) {
-    console.warn('DB 스냅샷 조회 실패, 로컬 스냅샷만 사용:', error)
-    return localSnapshots
+    console.warn('DB 스냅샷 조회 실패:', error)
+    return []
   }
 }
 
-// 동기 버전 (기존 호환성 유지)
+// 동기 버전은 더 이상 지원하지 않음 - 비동기 버전 사용 권장
 export function getSnapshotsSync(): Snapshot[] {
   if (typeof window === 'undefined') return []
-  return meetingStorage.getSnapshots()
+  console.warn('⚠️ getSnapshotsSync는 더 이상 지원하지 않습니다. getSnapshots()를 사용하세요.')
+  return []
 }
 
 // 특정 스냅샷으로 복원 (통합 버전)
@@ -191,47 +183,21 @@ export async function restoreSnapshot(snapshotId: number): Promise<boolean> {
       console.error('❌ 통합 스냅샷에서 찾을 수 없습니다:', snapshotId)
       console.log('📋 사용 가능한 스냅샷 ID들:', allSnapshots.map(s => s.id))
       
-      // 폴백: 로컬스토리지만 재시도
-      const localSnapshots = getSnapshotsSync()
-      const localSnapshot = localSnapshots.find(s => s.id === snapshotId)
-      
-      if (!localSnapshot) {
-        console.error('❌ 로컬 스냅샷에서도 찾을 수 없습니다:', snapshotId)
-        console.log('📋 로컬 스냅샷 ID들:', localSnapshots.map(s => s.id))
-        return false
-      }
-      
-      console.log('✅ 로컬 스냅샷에서 발견, 복원 진행')
-      return restoreSnapshotData(localSnapshot)
+      return false
     }
     
     console.log('✅ 통합 스냅샷에서 발견, 복원 진행')
-    return restoreSnapshotData(snapshot)
+    return await restoreSnapshotData(snapshot)
     
   } catch (error) {
     console.error('❌ 스냅샷 복원 중 예외 발생:', error)
     
-    // 에러 시 동기 버전으로 폴백
-    try {
-      const snapshots = getSnapshotsSync()
-      const snapshot = snapshots.find(s => s.id === snapshotId)
-      
-      if (!snapshot) {
-        console.error('❌ 폴백에서도 스냅샷을 찾을 수 없습니다:', snapshotId)
-        return false
-      }
-      
-      console.log('✅ 폴백으로 스냅샷 복원 시도')
-      return restoreSnapshotData(snapshot)
-    } catch (fallbackError) {
-      console.error('❌ 폴백 복원도 실패:', fallbackError)
-      return false
-    }
+    return false
   }
 }
 
-// 스냅샷 데이터 복원 헬퍼 함수
-function restoreSnapshotData(snapshot: Snapshot): boolean {
+// 스냅샷 데이터 복원 헬퍼 함수 (비동기로 변경)
+async function restoreSnapshotData(snapshot: Snapshot): Promise<boolean> {
   try {
     console.log(`🔄 스냅샷 데이터 복원 시작: ${snapshot.description}`)
     console.log(`📦 복원할 데이터 확인:`, {
@@ -245,24 +211,26 @@ function restoreSnapshotData(snapshot: Snapshot): boolean {
     })
     
     // 현재 상태를 '복원 전' 스냅샷으로 저장
-    createSnapshot('restore_backup', `${formatDateTime(snapshot.timestamp)} 복원 전 백업`)
+    await createSnapshot('restore_backup', `${formatDateTime(snapshot.timestamp)} 복원 전 백업`)
     
-    // 데이터 복원
+    // 데이터 복원 (data-service 사용)
     console.log(`💾 참가자 데이터 복원: ${snapshot.data.participants?.length || 0}명`)
-    meetingStorage.setParticipants(snapshot.data.participants || [])
+    await participantService.save(snapshot.data.participants || [])
     
     console.log(`💾 그룹핑 결과 복원: ${snapshot.data.groupingResult ? '있음' : '없음'}`)
-    meetingStorage.setGroupingResult(snapshot.data.groupingResult)
+    if (snapshot.data.groupingResult) {
+      await groupingResultService.save(snapshot.data.groupingResult)
+    }
     
     console.log(`💾 현재 라운드 복원: ${snapshot.data.currentRound || '0'}`)
-    meetingStorage.setCurrentRound(parseInt(snapshot.data.currentRound || '0', 10))
+    await roundService.save(parseInt(snapshot.data.currentRound || '0', 10))
     
     console.log(`💾 이탈 참가자 복원: ${Object.keys(snapshot.data.exitedParticipants || {}).length}명`)
-    meetingStorage.setExitedParticipants(snapshot.data.exitedParticipants || {})
+    await exitedParticipantService.save(snapshot.data.exitedParticipants || {})
     
     if (snapshot.data.groupSettings) {
       console.log(`💾 그룹 설정 복원: 있음`)
-      meetingStorage.setGroupSettings(snapshot.data.groupSettings)
+      await groupSettingsService.save(snapshot.data.groupSettings)
     } else {
       console.log(`💾 그룹 설정 복원: 없음 (기본값 유지)`)
     }
@@ -275,26 +243,18 @@ function restoreSnapshotData(snapshot: Snapshot): boolean {
   }
 }
 
-// 동기 버전 (기존 호환성 유지)
+// 동기 버전은 더 이상 지원하지 않음 - 비동기 버전 사용 권장
 export function restoreSnapshotSync(snapshotId: number): boolean {
   if (typeof window === 'undefined') return false
-  
-  const snapshots = getSnapshotsSync()
-  const snapshot = snapshots.find(s => s.id === snapshotId)
-  
-  if (!snapshot) {
-    console.error('스냅샷을 찾을 수 없습니다:', snapshotId)
-    return false
-  }
-  
-  return restoreSnapshotData(snapshot)
+  console.warn('⚠️ restoreSnapshotSync는 더 이상 지원하지 않습니다. restoreSnapshot()를 사용하세요.')
+  return false
 }
 
 // JSON 파일로 내보내기
-export function exportToJSON(): void {
+export async function exportToJSON(): Promise<void> {
   if (typeof window === 'undefined') return
   
-  const data = getCurrentData()
+  const data = await getCurrentData()
   const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-')
   const filename = `모임데이터_${timestamp}.json`
   
@@ -316,7 +276,7 @@ export function importFromJSON(file: File): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string) as BackupData
         
@@ -326,16 +286,17 @@ export function importFromJSON(file: File): Promise<boolean> {
         }
         
         // 현재 상태를 백업으로 저장
-        createSnapshot('import_backup', '데이터 가져오기 전 백업')
+        await createSnapshot('import_backup', '데이터 가져오기 전 백업')
         
-        // 데이터 복원
-        // 모임별 저장
-        meetingStorage.setParticipants(data.participants)
-        meetingStorage.setGroupingResult(data.groupingResult)
-        meetingStorage.setCurrentRound(parseInt(data.currentRound || '0', 10))
-        meetingStorage.setExitedParticipants(data.exitedParticipants || {})
+        // 데이터 복원 (data-service 사용)
+        await participantService.save(data.participants)
+        if (data.groupingResult) {
+          await groupingResultService.save(data.groupingResult)
+        }
+        await roundService.save(parseInt(data.currentRound || '0', 10))
+        await exitedParticipantService.save(data.exitedParticipants || {})
         if (data.groupSettings) {
-          meetingStorage.setGroupSettings(data.groupSettings)
+          await groupSettingsService.save(data.groupSettings)
         }
         
         console.log('📥 데이터 가져오기 완료')
@@ -367,23 +328,27 @@ export function formatDateTime(isoString: string): string {
   })
 }
 
-// 스냅샷 삭제 (오래된 것부터)
-export function cleanupOldSnapshots(keepCount: number = 30): void {
+// 스냅샷 삭제 (오래된 것부터) - DB 전용으로 변경
+export async function cleanupOldSnapshots(keepCount: number = 30): Promise<void> {
   if (typeof window === 'undefined') return
   
-  const snapshots = getSnapshotsSync()  // 동기 버전 사용
-  if (snapshots.length <= keepCount) return
-  
-  const toKeep = snapshots.slice(-keepCount)
-  localStorage.setItem('snapshots', JSON.stringify(toKeep))
-  
-  console.log(`🧹 오래된 스냅샷 정리: ${snapshots.length - keepCount}개 삭제`)
+  try {
+    const snapshots = await getSnapshots()
+    if (snapshots.length <= keepCount) return
+    
+    // TODO: DB에서 오래된 스냅샷 삭제 기능 필요
+    console.log(`🧹 스냅샷 정리가 필요합니다: 현재 ${snapshots.length}개, 유지할 개수 ${keepCount}개`)
+    console.log('⚠️ DB 스냅샷 삭제 기능은 아직 구현되지 않았습니다.')
+  } catch (error) {
+    console.error('스냅샷 정리 중 오류:', error)
+  }
 }
 
-// 모든 백업 데이터 삭제
-export function clearAllBackups(): void {
+// 모든 백업 데이터 삭제 - DB 전용으로 변경
+export async function clearAllBackups(): Promise<void> {
   if (typeof window === 'undefined') return
   
-  localStorage.removeItem('snapshots')
-  console.log('🗑️ 모든 백업 데이터 삭제 완료')
+  // TODO: DB에서 모든 스냅샷 삭제 기능 필요
+  console.log('⚠️ DB 백업 데이터 삭제 기능은 아직 구현되지 않았습니다.')
+  console.log('🗑️ 현재는 개별 모임 데이터만 삭제할 수 있습니다.')
 }
