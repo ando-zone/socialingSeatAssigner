@@ -344,6 +344,87 @@ export default function Home() {
     }
   }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
 
+  // 현재 라운드 재배치 (라운드 번호는 유지하고 다시 배치)
+  const regroupCurrentRound = async () => {
+    if (participants.length < 2) {
+      alert('참가자가 최소 2명 이상 필요합니다.')
+      return
+    }
+
+    const confirmMessage = `현재 ${currentRound-1}라운드를 다시 배치하시겠습니까?\n\n⚠️ 기존 배치 결과가 새로운 배치로 교체됩니다.`
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
+    setIsLoading(true)
+    
+    try {
+      const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
+      
+      // 재배치 전 스냅샷 생성
+      await createSnapshot('regroup_start', `${currentRound-1}라운드 재배치 시작`)
+      
+      const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
+      const reGroupRound = currentRound - 1 // 현재 라운드를 다시 배치
+      
+      console.log(`🔄 ${reGroupRound}라운드 재배치 시작 - 기존 히스토리 정리 중...`)
+      
+      // 참가자 히스토리에서 해당 라운드 정보 제거 (재배치를 위해)
+      const participantsForRegroup = participants.map(p => {
+        const newMeetingsByRound = { ...p.meetingsByRound }
+        if (newMeetingsByRound[reGroupRound]) {
+          delete newMeetingsByRound[reGroupRound]
+        }
+        
+        // allMetPeople을 나머지 라운드들로부터 다시 계산
+        const allMet = new Set<string>()
+        Object.entries(newMeetingsByRound).forEach(([round, meetIds]) => {
+          if (parseInt(round) !== reGroupRound) { // 재배치할 라운드 제외
+            meetIds.forEach(metId => allMet.add(metId))
+          }
+        })
+        const newAllMetPeople = Array.from(allMet)
+        
+        // groupHistory에서 해당 라운드의 그룹 정보도 제거
+        let newGroupHistory = [...p.groupHistory]
+        if (newGroupHistory.length >= reGroupRound) {
+          // 해당 라운드의 그룹 정보 제거 (배열 인덱스는 0부터 시작하므로 round-1)
+          newGroupHistory = newGroupHistory.slice(0, reGroupRound - 1)
+        }
+        
+        return {
+          ...p,
+          meetingsByRound: newMeetingsByRound,
+          allMetPeople: newAllMetPeople,
+          groupHistory: newGroupHistory
+        }
+      })
+      
+      // 새로운 그룹 배치
+      const result = createOptimalGroups(participantsForRegroup, groupSizeParam, reGroupRound)
+      const updatedParticipants = updateMeetingHistory(participantsForRegroup, result.groups, reGroupRound)
+      
+      console.log(`✅ ${reGroupRound}라운드 재배치 완료 - 새로운 히스토리 적용됨`)
+      
+      // Supabase 저장
+      await saveGroupingResult(result)
+      await saveParticipants(updatedParticipants)
+      
+      // 재배치 완료 스냅샷 생성
+      await createSnapshot('regroup_completed', `${reGroupRound}라운드 재배치 완료`)
+      
+      // 상태 업데이트
+      setParticipants(updatedParticipants)
+      
+      // 결과 페이지로 이동
+      router.push('/result')
+    } catch (error) {
+      alert('재배치 중 오류가 발생했습니다: ' + (error as Error).message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const processBulkInput = async () => {
     if (!bulkText.trim()) return
 
@@ -1142,17 +1223,27 @@ export default function Home() {
                   disabled={isLoading}
                   className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
                 >
-                  {isLoading ? '배치 중...' : '새롭게 그룹 배치하기'}
+                  {isLoading ? '배치 중...' : '새로운 그룹 배치하기'}
                 </button>
                 
                 {isClient && hasExistingResult && (
-                  <button
-                    onClick={() => router.push('/result')}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2"
-                  >
-                    <span className="text-lg">📊</span>
-                    <span>배치 결과 확인하기</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={regroupCurrentRound}
+                      disabled={isLoading}
+                      className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
+                    >
+                      {isLoading ? '재배치 중...' : '이번 그룹 재배치하기'}
+                    </button>
+                    
+                    <button
+                      onClick={() => router.push('/result')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2"
+                    >
+                      <span className="text-lg">📊</span>
+                      <span>배치 결과 확인하기</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
