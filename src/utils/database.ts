@@ -125,6 +125,25 @@ export const getUserMeetings = async (
   }
 }
 
+export const getCurrentMeeting = async (): Promise<Meeting | null> => {
+  const supabase = createSupabaseClient()
+  if (!supabase || !currentMeetingId) return null
+  
+  try {
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('*')
+      .eq('id', currentMeetingId)
+      .single()
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('현재 모임 조회 중 오류:', error)
+    return null
+  }
+}
+
 export const updateMeetingRound = async (meetingId: string, round: number): Promise<boolean> => {
   const supabase = createSupabaseClient()
   if (!supabase) return false
