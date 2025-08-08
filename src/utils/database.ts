@@ -543,6 +543,53 @@ export const selectMeeting = async (meetingId: string): Promise<boolean> => {
   return true
 }
 
+// 모임 완전 삭제 (모든 관련 데이터 포함)
+export const deleteMeeting = async (meetingId: string): Promise<boolean> => {
+  if (!isSupabaseConfigured) {
+    console.error('Supabase가 설정되지 않았습니다. 모임 삭제가 불가능합니다.')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 모임 삭제 시작:', meetingId)
+    
+    // 모든 관련 데이터 삭제 (스냅샷 포함)
+    const deletePromises = [
+      supabase.from('participants').delete().eq('meeting_id', meetingId),
+      supabase.from('grouping_results').delete().eq('meeting_id', meetingId),
+      supabase.from('group_settings').delete().eq('meeting_id', meetingId),
+      supabase.from('exited_participants').delete().eq('meeting_id', meetingId),
+      supabase.from('snapshots').delete().eq('meeting_id', meetingId),
+      // 마지막으로 모임 자체 삭제
+      supabase.from('meetings').delete().eq('id', meetingId)
+    ]
+    
+    const results = await Promise.all(deletePromises)
+    
+    // 삭제 결과 확인
+    for (const result of results) {
+      if (result.error) {
+        console.error('❌ 모임 삭제 중 일부 오류:', result.error)
+        throw result.error
+      }
+    }
+    
+    // 삭제된 모임이 현재 선택된 모임이면 초기화
+    if (getCurrentMeetingId() === meetingId) {
+      setCurrentMeetingId('')
+    }
+    
+    console.log('✅ 모임 삭제 완료:', meetingId)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 삭제 중 오류:', error)
+    return false
+  }
+}
+
 // 현재 모임의 모든 데이터 삭제 (새로운 모임 시작 시 사용)
 export const clearCurrentMeetingData = async (): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()

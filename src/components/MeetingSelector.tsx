@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createSupabaseClient } from '@/lib/supabase'
-import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, type Meeting } from '@/utils/database'
+import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, type Meeting } from '@/utils/database'
 import type { User } from '@supabase/supabase-js'
 
 interface MeetingSelectorProps {
@@ -68,6 +68,41 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
     } catch (error) {
       console.error('모임 선택 중 오류:', error)
       alert('모임 선택 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleDeleteMeeting = async (meetingId: string, meetingName: string, event: React.MouseEvent) => {
+    // 클릭 이벤트 전파 막기 (모임 선택 방지)
+    event.stopPropagation()
+    
+    const confirmMessage = `🗑️ "${meetingName}" 모임을 완전히 삭제하시겠습니까?
+
+⚠️ 다음 데이터가 모두 삭제됩니다:
+• 모든 참가자 정보
+• 그룹 배치 히스토리
+• 스냅샷 백업 데이터
+• 모임 설정 정보
+
+이 작업은 되돌릴 수 없습니다!`
+    
+    if (confirm(confirmMessage)) {
+      try {
+        const success = await deleteMeeting(meetingId)
+        if (success) {
+          alert('✅ 모임이 성공적으로 삭제되었습니다.')
+          // 삭제된 모임이 현재 선택된 모임이면 선택 해제
+          if (selectedMeetingId === meetingId) {
+            setSelectedMeetingId(null)
+          }
+          // 모임 목록 새로고침
+          await loadMeetings()
+        } else {
+          alert('❌ 모임 삭제 중 오류가 발생했습니다.')
+        }
+      } catch (error) {
+        console.error('모임 삭제 중 오류:', error)
+        alert('❌ 모임 삭제 중 오류가 발생했습니다.')
+      }
     }
   }
 
@@ -182,13 +217,24 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
                     <h4 className="font-medium text-gray-800 flex-1 line-clamp-2">
                       {meeting.name}
                     </h4>
-                    {selectedMeetingId === meeting.id && (
-                      <div className="text-blue-500 ml-2">
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    <div className="flex items-center space-x-2 ml-2">
+                      {selectedMeetingId === meeting.id && (
+                        <div className="text-blue-500">
+                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => handleDeleteMeeting(meeting.id, meeting.name, e)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                        title="모임 삭제"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                      </div>
-                    )}
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="space-y-2 text-sm text-gray-600">
