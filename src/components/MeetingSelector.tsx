@@ -19,6 +19,8 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [sortBy, setSortBy] = useState<'name' | 'created_at' | 'updated_at'>('updated_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     loadMeetings()
@@ -27,10 +29,14 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
     setSelectedMeetingId(currentId)
   }, [])
 
+  useEffect(() => {
+    loadMeetings()
+  }, [sortBy, sortOrder])
+
   const loadMeetings = async () => {
     setLoading(true)
     try {
-      const userMeetings = await getUserMeetings(user.id)
+      const userMeetings = await getUserMeetings(user.id, sortBy, sortOrder)
       setMeetings(userMeetings)
     } catch (error) {
       console.error('모임 목록 로드 중 오류:', error)
@@ -226,9 +232,42 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
 
         {/* 기존 모임 목록 */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4">
-            기존 모임 목록 ({meetings.length}개)
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">
+              기존 모임 목록 ({meetings.length}개)
+            </h3>
+            
+            {/* 정렬 옵션 */}
+            {meetings.length > 0 && (
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">정렬:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'name' | 'created_at' | 'updated_at')}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="name">모임 이름</option>
+                    <option value="created_at">생성일</option>
+                    <option value="updated_at">최근 업데이트</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                  title={sortOrder === 'asc' ? '오름차순' : '내림차순'}
+                >
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {sortOrder === 'asc' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
           
           {meetings.length === 0 ? (
             <div className="text-center py-8">
@@ -328,18 +367,12 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
                   
                   <div className="space-y-2 text-sm text-gray-600">
                     <div className="flex items-center">
-                      <span className="mr-2">🎯</span>
-                      <span>{meeting.current_round}라운드</span>
+                      <span className="mr-2">📅</span>
+                      <span>{formatDate(meeting.created_at)}</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="mr-2">📅</span>
+                      <span className="mr-2">🔄</span>
                       <span>{formatDate(meeting.updated_at)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-3 border-t border-gray-200">
-                    <div className="text-xs text-gray-500">
-                      마지막 업데이트: {formatDate(meeting.updated_at)}
                     </div>
                   </div>
                 </div>

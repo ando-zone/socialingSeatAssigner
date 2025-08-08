@@ -102,7 +102,11 @@ export const createMeeting = async (name: string, userId: string): Promise<Meeti
   }
 }
 
-export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
+export const getUserMeetings = async (
+  userId: string, 
+  sortBy: 'name' | 'created_at' | 'updated_at' = 'updated_at',
+  sortOrder: 'asc' | 'desc' = 'desc'
+): Promise<Meeting[]> => {
   const supabase = createSupabaseClient()
   if (!supabase) return []
   
@@ -111,7 +115,7 @@ export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
       .from('meetings')
       .select('*')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
+      .order(sortBy, { ascending: sortOrder === 'asc' })
 
     if (error) throw error
     return data || []
