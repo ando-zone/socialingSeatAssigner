@@ -602,7 +602,7 @@ export const deleteMeeting = async (meetingId: string): Promise<boolean> => {
     
     // 삭제된 모임이 현재 선택된 모임이면 초기화
     if (getCurrentMeetingId() === meetingId) {
-      setCurrentMeetingId('')
+      clearCurrentMeetingId()
     }
     
     console.log('✅ 모임 삭제 완료:', meetingId)
