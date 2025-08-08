@@ -614,7 +614,7 @@ export default function Home() {
 
 
   // 새로운 모임 시작 함수
-  const handleNewMeeting = () => {
+  const handleNewMeeting = async () => {
     const confirmMessage = `🎉 새로운 모임을 시작하시겠습니까?
 
 다음 데이터가 초기화됩니다:
@@ -627,10 +627,18 @@ export default function Home() {
 
     if (confirm(confirmMessage)) {
       try {
-        // Supabase에서 현재 모임의 데이터 삭제는 모임 전환 시 자동으로 처리됨
-        console.log('데이터 초기화: 현재 모임 종료')
+        // Supabase에서 현재 모임의 데이터 삭제
+        console.log('데이터 초기화: 현재 모임 데이터 삭제 중...')
+        const { clearCurrentMeetingData } = await import('@/utils/database')
+        const cleared = await clearCurrentMeetingData()
         
-        // 상태 초기화
+        if (!cleared) {
+          throw new Error('데이터 삭제 실패')
+        }
+        
+        console.log('✅ 데이터 삭제 완료, 상태 초기화 중...')
+        
+        // 상태 초기화 (데이터 삭제 확인 후에만 실행)
         setParticipants([])
         setCurrentRound(1)
         setName('')
@@ -643,14 +651,25 @@ export default function Home() {
         setBulkText('')
         setShowBulkInput(false)
         setShowBackupSection(false)
-        setIsInitialLoad(true)
         setHasExistingResult(false)
-        // isClient는 그대로 유지 (이미 클라이언트에서 실행 중이므로)
+        setIsInitialLoad(true)
         
-        // 초기화 완료 후 저장 가능하도록 설정
-        setTimeout(() => {
+        // localStorage도 초기화
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('seatAssigner_participants')
+          localStorage.removeItem('seatAssigner_groupingResult')
+          localStorage.removeItem('seatAssigner_currentRound')
+          localStorage.removeItem('seatAssigner_exitedParticipants')
+          localStorage.removeItem('seatAssigner_groupSettings')
+        }
+        
+        // 초기화 완료 후 스냅샷 생성
+        setTimeout(async () => {
           setIsInitialLoad(false)
-        }, 100)
+          // 백지 상태 스냅샷 생성
+          await createSnapshot('meeting_start', '새로운 모임 시작 - 초기화된 상태')
+          console.log('🎯 새로운 모임 초기화 완료')
+        }, 200)
         
         alert('✅ 새로운 모임이 시작되었습니다!')
       } catch (error) {
