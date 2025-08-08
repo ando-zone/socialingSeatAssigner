@@ -17,6 +17,7 @@ export default function Home() {
   const [groupingMode, setGroupingMode] = useState<'auto' | 'manual'>('manual')
   const [numGroups, setNumGroups] = useState(6)
   const [customGroupSizes, setCustomGroupSizes] = useState<number[]>([12, 12, 12, 12, 12, 12])
+  const [groupSettingsLoaded, setGroupSettingsLoaded] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [showBulkInput, setShowBulkInput] = useState(false)
   const [showBackupSection, setShowBackupSection] = useState(false)
@@ -130,6 +131,8 @@ export default function Home() {
   const handleGroupSizeChange = (groupIndex: number, newSize: number) => {
     const newSizes = [...customGroupSizes]
     newSizes[groupIndex] = newSize
+    console.log(`🎯 그룹 ${groupIndex + 1} 크기 변경: ${customGroupSizes[groupIndex]} → ${newSize}`)
+    console.log('📊 새로운 그룹 크기 배열:', newSizes)
     setCustomGroupSizes(newSizes)
   }
 
@@ -309,11 +312,19 @@ export default function Home() {
         // 그룹 설정 복원
         if (groupSettings) {
           console.log('저장된 그룹 설정 복원:', groupSettings)
-          setGroupingMode(groupSettings.groupingMode)
-          setGroupSize(groupSettings.groupSize)
-          setNumGroups(groupSettings.numGroups)
-          setCustomGroupSizes(groupSettings.customGroupSizes)
+          setGroupingMode(groupSettings.groupingMode || 'manual')
+          setGroupSize(groupSettings.groupSize || 4)
+          setNumGroups(groupSettings.numGroups || 6)
+          setCustomGroupSizes(groupSettings.customGroupSizes || [12, 12, 12, 12, 12, 12])
+        } else {
+          // 저장된 설정이 없으면 기본값으로 초기화
+          console.log('저장된 그룹 설정이 없어 기본값 사용')
+          setGroupingMode('manual')
+          setGroupSize(4)
+          setNumGroups(6)
+          setCustomGroupSizes([12, 12, 12, 12, 12, 12])
         }
+        setGroupSettingsLoaded(true)
         
         console.log('📦 데이터 로딩 완료')
         
@@ -328,9 +339,9 @@ export default function Home() {
     setIsInitialLoad(false)
   }, [])
 
-  // 그룹 설정 변경 시 Supabase에 저장 (초기 로드 후에만)
+  // 그룹 설정 변경 시 Supabase에 저장 (초기 로드 및 설정 로드 완료 후에만)
   useEffect(() => {
-    if (!isInitialLoad) {
+    if (!isInitialLoad && groupSettingsLoaded) {
       const saveGroupSettings = async () => {
         try {
           const { saveGroupSettings: saveSettings } = await import('@/utils/database')
@@ -348,7 +359,7 @@ export default function Home() {
       }
       saveGroupSettings()
     }
-  }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
+  }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad, groupSettingsLoaded])
 
   // 현재 라운드 재배치 (라운드 번호는 유지하고 다시 배치)
   const regroupCurrentRound = async () => {
@@ -659,6 +670,7 @@ export default function Home() {
         setShowBackupSection(false)
         setHasExistingResult(false)
         setIsInitialLoad(true)
+        setGroupSettingsLoaded(false)
         
         // localStorage도 초기화
         if (typeof window !== 'undefined') {
@@ -672,6 +684,7 @@ export default function Home() {
         // 초기화 완료 후 스냅샷 생성
         setTimeout(async () => {
           setIsInitialLoad(false)
+          setGroupSettingsLoaded(true)
           // 백지 상태 스냅샷 생성
           await createSnapshot('meeting_start', '새로운 모임 시작 - 초기화된 상태')
           console.log('🎯 새로운 모임 초기화 완료')
