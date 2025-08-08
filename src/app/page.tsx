@@ -24,6 +24,7 @@ export default function Home() {
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [hasExistingResult, setHasExistingResult] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [currentMeeting, setCurrentMeeting] = useState<any>(null)
 
   const addParticipant = async () => {
     if (name.trim()) {
@@ -38,14 +39,15 @@ export default function Home() {
       }
       const updatedParticipants = [...participants, newParticipant]
       
-      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      // 즉시 Supabase에 저장 (스냅샷 생성 전에)
+      const { saveParticipants } = await import('@/utils/database')
+      await saveParticipants(updatedParticipants)
       
       // 상태 업데이트
       setParticipants(updatedParticipants)
       setName('')
       
-      // 참가자 추가 시 스냅샷 생성 (localStorage 저장 후)
+      // 참가자 추가 시 스냅샷 생성 (Supabase 저장 후)
       try {
         await createSnapshot('participant_add', `참가자 추가: ${newParticipant.name}`)
         console.log(`✅ 참가자 추가 스냅샷 생성 완료: ${newParticipant.name}`)
@@ -68,19 +70,20 @@ export default function Home() {
     const participantToRemove = participants.find(p => p.id === id)
     const updatedParticipants = participants.filter(p => p.id !== id)
     
-    // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    // 즉시 Supabase에 저장 (스냅샷 생성 전에)
+    const { saveParticipants, getExitedParticipants, saveExitedParticipants } = await import('@/utils/database')
+    await saveParticipants(updatedParticipants)
     
     if (participantToRemove) {
-      // 이탈한 사람 정보를 localStorage에 저장
-      const exitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+      // 이탈한 사람 정보를 Supabase에 저장
+      const exitedParticipants = await getExitedParticipants()
       exitedParticipants[id] = {
         name: participantToRemove.name,
         gender: participantToRemove.gender
       }
-      localStorage.setItem('exitedParticipants', JSON.stringify(exitedParticipants))
+      await saveExitedParticipants(exitedParticipants)
       
-      // 참가자 제거 시 스냅샷 생성 (localStorage 저장 후)
+      // 참가자 제거 시 스냅샷 생성 (Supabase 저장 후)
       try {
         await createSnapshot('participant_remove', `참가자 제거: ${participantToRemove.name}`)
         console.log(`✅ 참가자 제거 스냅샷 생성 완료: ${participantToRemove.name}`)
@@ -169,10 +172,14 @@ export default function Home() {
       
       const nextRound = currentRound + 1
       
-      // 로컬스토리지 저장
-      localStorage.setItem('groupingResult', JSON.stringify(result))
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
-      localStorage.setItem('currentRound', String(nextRound))
+      // Supabase 저장
+      await saveGroupingResult(result)
+      await saveParticipants(updatedParticipants)
+      
+      const meetingId = getCurrentMeetingId()
+      if (meetingId) {
+        await updateMeetingRound(meetingId, nextRound)
+      }
       
       // 그룹 설정 저장
       const groupSettings = {
@@ -181,40 +188,14 @@ export default function Home() {
         numGroups,
         customGroupSizes
       }
-      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
+      await saveGroupSettings(groupSettings)
       
-      // 데이터베이스 저장 시도
-      const meetingId = getCurrentMeetingId()
-      if (meetingId) {
-        try {
-          console.log('🔄 데이터베이스 동기화 시작...')
-          
-          // 병렬로 DB 저장 실행
-          const savePromises = [
-            updateMeetingRound(meetingId, nextRound),
-            saveParticipants(updatedParticipants),
-            saveGroupingResult(result),
-            saveGroupSettings(groupSettings)
-          ]
-          
-          const results = await Promise.allSettled(savePromises)
-          
-          // 저장 결과 확인
-          results.forEach((result, index) => {
-            const operations = ['라운드 업데이트', '참가자 저장', '그룹 결과 저장', '그룹 설정 저장']
-            if (result.status === 'fulfilled' && result.value) {
-              console.log(`✅ ${operations[index]} 성공`)
-            } else {
-              console.warn(`⚠️ ${operations[index]} 실패:`, result.status === 'rejected' ? result.reason : '결과가 false')
-            }
-          })
-          
-          console.log('💾 데이터베이스 동기화 완료')
-        } catch (dbError) {
-          console.warn('⚠️ 데이터베이스 저장 중 오류 (로컬은 정상):', dbError)
-        }
-      } else {
-        console.log('ℹ️ 활성 모임이 없어 로컬스토리지만 사용')
+      // 스냅샷 생성
+      try {
+        await createSnapshot('group_generation', `${nextRound-1}라운드 그룹 생성`)
+        console.log('✅ 그룹 생성 스냅샷 저장 완료')
+      } catch (snapshotError) {
+        console.warn('⚠️ 스냅샷 생성 실패:', snapshotError)
       }
       
       // 결과가 생성되었음을 표시
@@ -280,63 +261,175 @@ export default function Home() {
     // 클라이언트임을 표시
     setIsClient(true)
     
-    const storedParticipants = localStorage.getItem('participants')
-    const storedRound = localStorage.getItem('currentRound')
-    const storedGroupSettings = localStorage.getItem('groupSettings')
-    const storedResult = localStorage.getItem('groupingResult')
-    
-    // 기존 결과가 있는지 확인
-    setHasExistingResult(!!storedResult)
-    
-    if (storedParticipants) {
-      const participants = JSON.parse(storedParticipants)
-      const currentRound = storedRound ? Number(storedRound) : 1
-      
-      // 데이터 마이그레이션 적용
-      const migratedParticipants = migrateParticipantData(participants, currentRound)
-      
-      setParticipants(migratedParticipants)
-      
-      // 마이그레이션된 데이터를 localStorage에 저장
-      localStorage.setItem('participants', JSON.stringify(migratedParticipants))
-    }
-    if (storedRound) {
-      setCurrentRound(Number(storedRound))
-    }
-    
-    // 그룹 설정 복원
-    if (storedGroupSettings) {
+    // Supabase에서 데이터 로딩
+    const loadData = async () => {
       try {
-        const groupSettings = JSON.parse(storedGroupSettings)
-        console.log('저장된 그룹 설정 복원:', groupSettings)
-        if (groupSettings.groupingMode) setGroupingMode(groupSettings.groupingMode)
-        if (groupSettings.groupSize) setGroupSize(groupSettings.groupSize)
-        if (groupSettings.numGroups) setNumGroups(groupSettings.numGroups)
-        if (groupSettings.customGroupSizes) setCustomGroupSizes(groupSettings.customGroupSizes)
+        const { 
+          getParticipants, 
+          getGroupingResult, 
+          getGroupSettings,
+          getCurrentMeetingId,
+          getCurrentMeeting
+        } = await import('@/utils/database')
+        
+        const meetingId = getCurrentMeetingId()
+        if (!meetingId) {
+          console.log('활성 모임이 없습니다.')
+          return
+        }
+        
+        // 현재 모임 정보 가져오기
+        const meeting = await getCurrentMeeting()
+        setCurrentMeeting(meeting)
+        
+        console.log('📥 Supabase에서 데이터 로딩 중...')
+        
+        const [participants, groupingResult, groupSettings] = await Promise.all([
+          getParticipants(),
+          getGroupingResult(),
+          getGroupSettings()
+        ])
+        
+        // 기존 결과가 있는지 확인
+        setHasExistingResult(!!groupingResult)
+        
+        // 참가자 데이터 설정
+        if (participants.length > 0) {
+          // 현재 라운드 추출
+          const currentRound = groupingResult?.round ? groupingResult.round + 1 : 1
+          
+          // 데이터 마이그레이션 적용
+          const migratedParticipants = migrateParticipantData(participants, currentRound)
+          setParticipants(migratedParticipants)
+          setCurrentRound(currentRound)
+          
+          console.log('✅ 참가자 데이터 로드:', migratedParticipants.length + '명')
+        }
+        
+        // 그룹 설정 복원
+        if (groupSettings) {
+          console.log('저장된 그룹 설정 복원:', groupSettings)
+          setGroupingMode(groupSettings.groupingMode)
+          setGroupSize(groupSettings.groupSize)
+          setNumGroups(groupSettings.numGroups)
+          setCustomGroupSizes(groupSettings.customGroupSizes)
+        }
+        
+        console.log('📦 데이터 로딩 완료')
+        
       } catch (error) {
-        console.error('그룹 설정 복원 중 오류:', error)
+        console.error('❌ 데이터 로딩 중 오류:', error)
       }
-    } else {
-      console.log('저장된 그룹 설정이 없습니다.')
     }
+    
+    loadData()
     
     // 초기 로드 완료 표시
     setIsInitialLoad(false)
   }, [])
 
-  // 그룹 설정 변경 시 localStorage에 저장 (초기 로드 후에만)
+  // 그룹 설정 변경 시 Supabase에 저장 (초기 로드 후에만)
   useEffect(() => {
     if (!isInitialLoad) {
-      const groupSettings = {
-        groupingMode,
-        groupSize,
-        numGroups,
-        customGroupSizes
+      const saveGroupSettings = async () => {
+        try {
+          const { saveGroupSettings: saveSettings } = await import('@/utils/database')
+          const groupSettings = {
+            groupingMode,
+            groupSize,
+            numGroups,
+            customGroupSizes
+          }
+          await saveSettings(groupSettings)
+          console.log('그룹 설정 저장됨:', groupSettings)
+        } catch (error) {
+          console.error('그룹 설정 저장 중 오류:', error)
+        }
       }
-      localStorage.setItem('groupSettings', JSON.stringify(groupSettings))
-      console.log('그룹 설정 저장됨:', groupSettings)
+      saveGroupSettings()
     }
   }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad])
+
+  // 현재 라운드 재배치 (라운드 번호는 유지하고 다시 배치)
+  const regroupCurrentRound = async () => {
+    if (participants.length < 2) {
+      alert('참가자가 최소 2명 이상 필요합니다.')
+      return
+    }
+
+    const confirmMessage = `현재 ${currentRound-1}라운드를 다시 배치하시겠습니까?\n\n⚠️ 기존 배치 결과가 새로운 배치로 교체됩니다.`
+    if (!confirm(confirmMessage)) {
+      return
+    }
+
+    setIsLoading(true)
+    
+    try {
+      const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
+      
+      // 재배치 전 스냅샷 생성
+      await createSnapshot('regroup_start', `${currentRound-1}라운드 재배치 시작`)
+      
+      const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
+      const reGroupRound = currentRound - 1 // 현재 라운드를 다시 배치
+      
+      console.log(`🔄 ${reGroupRound}라운드 재배치 시작 - 기존 히스토리 정리 중...`)
+      
+      // 참가자 히스토리에서 해당 라운드 정보 제거 (재배치를 위해)
+      const participantsForRegroup = participants.map(p => {
+        const newMeetingsByRound = { ...p.meetingsByRound }
+        if (newMeetingsByRound[reGroupRound]) {
+          delete newMeetingsByRound[reGroupRound]
+        }
+        
+        // allMetPeople을 나머지 라운드들로부터 다시 계산
+        const allMet = new Set<string>()
+        Object.entries(newMeetingsByRound).forEach(([round, meetIds]) => {
+          if (parseInt(round) !== reGroupRound) { // 재배치할 라운드 제외
+            meetIds.forEach(metId => allMet.add(metId))
+          }
+        })
+        const newAllMetPeople = Array.from(allMet)
+        
+        // groupHistory에서 해당 라운드의 그룹 정보도 제거
+        let newGroupHistory = [...p.groupHistory]
+        if (newGroupHistory.length >= reGroupRound) {
+          // 해당 라운드의 그룹 정보 제거 (배열 인덱스는 0부터 시작하므로 round-1)
+          newGroupHistory = newGroupHistory.slice(0, reGroupRound - 1)
+        }
+        
+        return {
+          ...p,
+          meetingsByRound: newMeetingsByRound,
+          allMetPeople: newAllMetPeople,
+          groupHistory: newGroupHistory
+        }
+      })
+      
+      // 새로운 그룹 배치
+      const result = createOptimalGroups(participantsForRegroup, groupSizeParam, reGroupRound)
+      const updatedParticipants = updateMeetingHistory(participantsForRegroup, result.groups, reGroupRound)
+      
+      console.log(`✅ ${reGroupRound}라운드 재배치 완료 - 새로운 히스토리 적용됨`)
+      
+      // Supabase 저장
+      await saveGroupingResult(result)
+      await saveParticipants(updatedParticipants)
+      
+      // 재배치 완료 스냅샷 생성
+      await createSnapshot('regroup_completed', `${reGroupRound}라운드 재배치 완료`)
+      
+      // 상태 업데이트
+      setParticipants(updatedParticipants)
+      
+      // 결과 페이지로 이동
+      router.push('/result')
+    } catch (error) {
+      alert('재배치 중 오류가 발생했습니다: ' + (error as Error).message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const processBulkInput = async () => {
     if (!bulkText.trim()) return
@@ -408,15 +501,16 @@ export default function Home() {
     if (newParticipants.length > 0) {
       const updatedParticipants = [...participants, ...newParticipants]
       
-      // 즉시 localStorage에 저장 (스냅샷 생성 전에)
-      localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+      // 즉시 Supabase에 저장 (스냅샷 생성 전에)
+      const { saveParticipants } = await import('@/utils/database')
+      await saveParticipants(updatedParticipants)
       
       // 상태 업데이트
       setParticipants(updatedParticipants)
       setBulkText('')
       setShowBulkInput(false)
       
-      // 벌크 추가 시 스냅샷 생성 (localStorage 저장 후)
+      // 벌크 추가 시 스냅샷 생성 (Supabase 저장 후)
       try {
         await createSnapshot('bulk_add', `벌크 추가: ${newParticipants.length}명`)
         console.log(`✅ 벌크 추가 스냅샷 생성 완료: ${newParticipants.length}명`)
@@ -445,11 +539,18 @@ export default function Home() {
     if (!file) return
 
     try {
-      await importFromJSON(file)
-      // 데이터 가져온 후 기존 결과 확인 (클라이언트에서만)
-      if (typeof window !== 'undefined') {
-        const storedResult = localStorage.getItem('groupingResult')
-        setHasExistingResult(!!storedResult)
+      const fileContent = await file.text()
+      const result = await importFromJSON(fileContent)
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+      // 데이터 가져온 후 기존 결과 확인
+      try {
+        const { getGroupingResult } = await import('@/utils/database')
+        const groupingResult = await getGroupingResult()
+        setHasExistingResult(!!groupingResult)
+      } catch (error) {
+        console.error('기존 결과 확인 중 오류:', error)
       }
       alert('데이터를 성공적으로 가져왔습니다!')
       window.location.reload() // 페이지 새로고침으로 상태 반영
@@ -470,10 +571,13 @@ export default function Home() {
         if (success) {
           console.log('✅ 스냅샷 복원 성공!')
           
-          // 복원 후 기존 결과 확인 (클라이언트에서만)
-          if (typeof window !== 'undefined') {
-            const storedResult = localStorage.getItem('groupingResult')
-            setHasExistingResult(!!storedResult)
+          // 복원 후 기존 결과 확인
+          try {
+            const { getGroupingResult } = await import('@/utils/database')
+            const groupingResult = await getGroupingResult()
+            setHasExistingResult(!!groupingResult)
+          } catch (error) {
+            console.error('복원 후 결과 확인 중 오류:', error)
           }
           
           alert('✅ 복원이 완료되었습니다!')
@@ -495,9 +599,8 @@ export default function Home() {
         const allSnapshots = await getSnapshots()
         setSnapshots(allSnapshots)
       } catch (error) {
-        console.warn('스냅샷 조회 실패, 동기 버전 사용:', error)
-        const { getSnapshotsSync } = await import('@/utils/backup')
-        setSnapshots(getSnapshotsSync())
+        console.warn('스냅샷 조회 실패:', error)
+        setSnapshots([])
       }
     }
   }
@@ -517,7 +620,7 @@ export default function Home() {
 
 
   // 새로운 모임 시작 함수
-  const handleNewMeeting = () => {
+  const handleNewMeeting = async () => {
     const confirmMessage = `🎉 새로운 모임을 시작하시겠습니까?
 
 다음 데이터가 초기화됩니다:
@@ -530,14 +633,18 @@ export default function Home() {
 
     if (confirm(confirmMessage)) {
       try {
-        // localStorage의 모임 관련 데이터만 삭제 (백업은 유지)
-        localStorage.removeItem('participants')
-        localStorage.removeItem('currentRound')
-        localStorage.removeItem('groupingResult')
-        localStorage.removeItem('exitedParticipants')
-        localStorage.removeItem('groupSettings')
+        // Supabase에서 현재 모임의 데이터 삭제
+        console.log('데이터 초기화: 현재 모임 데이터 삭제 중...')
+        const { clearCurrentMeetingData } = await import('@/utils/database')
+        const cleared = await clearCurrentMeetingData()
         
-        // 상태 초기화
+        if (!cleared) {
+          throw new Error('데이터 삭제 실패')
+        }
+        
+        console.log('✅ 데이터 삭제 완료, 상태 초기화 중...')
+        
+        // 상태 초기화 (데이터 삭제 확인 후에만 실행)
         setParticipants([])
         setCurrentRound(1)
         setName('')
@@ -550,14 +657,25 @@ export default function Home() {
         setBulkText('')
         setShowBulkInput(false)
         setShowBackupSection(false)
-        setIsInitialLoad(true)
         setHasExistingResult(false)
-        // isClient는 그대로 유지 (이미 클라이언트에서 실행 중이므로)
+        setIsInitialLoad(true)
         
-        // 초기화 완료 후 저장 가능하도록 설정
-        setTimeout(() => {
+        // localStorage도 초기화
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('seatAssigner_participants')
+          localStorage.removeItem('seatAssigner_groupingResult')
+          localStorage.removeItem('seatAssigner_currentRound')
+          localStorage.removeItem('seatAssigner_exitedParticipants')
+          localStorage.removeItem('seatAssigner_groupSettings')
+        }
+        
+        // 초기화 완료 후 스냅샷 생성
+        setTimeout(async () => {
           setIsInitialLoad(false)
-        }, 100)
+          // 백지 상태 스냅샷 생성
+          await createSnapshot('meeting_start', '새로운 모임 시작 - 초기화된 상태')
+          console.log('🎯 새로운 모임 초기화 완료')
+        }, 200)
         
         alert('✅ 새로운 모임이 시작되었습니다!')
       } catch (error) {
@@ -573,9 +691,14 @@ export default function Home() {
         {/* 헤더 섹션 - 제목과 초기화 버튼 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold text-gray-800">
-              모임 자리 배치 프로그램
-            </h1>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800 flex items-center space-x-3">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>{currentMeeting ? currentMeeting.name : '모임 자리 배치 프로그램'}</span>
+              </h1>
+            </div>
             <div className="flex items-center space-x-4">
               {participants.length > 0 && (
                 <div className="text-right">
@@ -1130,17 +1253,27 @@ export default function Home() {
                   disabled={isLoading}
                   className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
                 >
-                  {isLoading ? '배치 중...' : '새롭게 그룹 배치하기'}
+                  {isLoading ? '배치 중...' : '새로운 그룹 배치하기'}
                 </button>
                 
                 {isClient && hasExistingResult && (
-                  <button
-                    onClick={() => router.push('/result')}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2"
-                  >
-                    <span className="text-lg">📊</span>
-                    <span>배치 결과 확인하기</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={regroupCurrentRound}
+                      disabled={isLoading}
+                      className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white font-medium py-3 px-6 rounded-md"
+                    >
+                      {isLoading ? '재배치 중...' : '이번 그룹 재배치하기'}
+                    </button>
+                    
+                    <button
+                      onClick={() => router.push('/result')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-5 rounded-md flex items-center gap-2"
+                    >
+                      <span className="text-lg">📊</span>
+                      <span>배치 결과 확인하기</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>

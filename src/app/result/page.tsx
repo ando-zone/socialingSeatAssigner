@@ -32,30 +32,52 @@ export default function ResultPage() {
   })
 
   useEffect(() => {
-    const storedResult = localStorage.getItem('groupingResult')
-    const storedParticipants = localStorage.getItem('participants')
-    const storedExitedParticipants = localStorage.getItem('exitedParticipants')
-    
-    if (storedResult && storedParticipants) {
-      const result = JSON.parse(storedResult)
-      const participants = JSON.parse(storedParticipants)
-      
-      // 이탈한 사람들 정보 로드
-      if (storedExitedParticipants) {
-        setExitedParticipants(JSON.parse(storedExitedParticipants))
+    const loadData = async () => {
+      try {
+        const { 
+          getGroupingResult, 
+          getParticipants, 
+          getExitedParticipants,
+          getCurrentMeetingId
+        } = await import('@/utils/database')
+        
+        const meetingId = getCurrentMeetingId()
+        if (!meetingId) {
+          console.log('활성 모임이 없습니다.')
+          router.push('/')
+          return
+        }
+        
+        console.log('📥 결과 페이지 데이터 로딩 중...')
+        
+        const [groupingResult, participants, exitedParticipants] = await Promise.all([
+          getGroupingResult(),
+          getParticipants(),
+          getExitedParticipants()
+        ])
+        
+        if (groupingResult && participants.length > 0) {
+          // 이탈한 사람들 정보 설정
+          setExitedParticipants(exitedParticipants)
+          
+          // 데이터 마이그레이션 적용
+          const migratedParticipants = migrateParticipantData(participants, groupingResult.round || 1)
+          
+          setResult(groupingResult)
+          setParticipants(migratedParticipants)
+          
+          console.log('✅ 결과 페이지 데이터 로드 완료')
+        } else {
+          console.log('그룹 배치 결과가 없습니다. 메인 페이지로 이동합니다.')
+          router.push('/')
+        }
+      } catch (error) {
+        console.error('❌ 결과 페이지 데이터 로딩 중 오류:', error)
+        router.push('/')
       }
-      
-      // 데이터 마이그레이션 적용
-      const migratedParticipants = migrateParticipantData(participants, result.round || 1)
-      
-      setResult(result)
-      setParticipants(migratedParticipants)
-      
-      // 마이그레이션된 데이터를 localStorage에 저장
-      localStorage.setItem('participants', JSON.stringify(migratedParticipants))
-    } else {
-      router.push('/')
     }
+    
+    loadData()
   }, [router])
 
   // 모바일 환경 감지
@@ -184,7 +206,7 @@ export default function ResultPage() {
   }
 
   // 새로운 참가자를 특정 그룹에 추가
-  const addParticipantToGroup = (groupId: number) => {
+  const addParticipantToGroup = async (groupId: number) => {
     if (!newParticipant.name.trim() || !result) return
 
     // 해당 그룹의 기존 멤버들 찾기
@@ -285,9 +307,17 @@ export default function ResultPage() {
     setResult(fullyUpdatedResult)
     setParticipants(updatedParticipants)
 
-    // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    // Supabase 업데이트
+    try {
+      const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
+      await Promise.all([
+        saveGroupingResult(fullyUpdatedResult),
+        saveParticipants(updatedParticipants)
+      ])
+      console.log('✅ 참가자 추가 후 데이터 저장 완료')
+    } catch (error) {
+      console.error('❌ 데이터 저장 중 오류:', error)
+    }
 
     // 참가자 추가 시 스냅샷 생성
     createSnapshot('participant_add_result', `그룹 ${groupId}에 ${participant.name} 추가`)
@@ -347,9 +377,17 @@ export default function ResultPage() {
     setResult(fullyUpdatedResult)
     setParticipants(updatedParticipants)
 
-    // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    // Supabase 업데이트
+    try {
+      const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
+      await Promise.all([
+        saveGroupingResult(fullyUpdatedResult),
+        saveParticipants(updatedParticipants)
+      ])
+      console.log('✅ 참가자 이동 후 데이터 저장 완료')
+    } catch (error) {
+      console.error('❌ 데이터 저장 중 오류:', error)
+    }
 
     // 스냅샷 생성
     const { createSnapshot } = await import('@/utils/backup')
@@ -403,22 +441,20 @@ export default function ResultPage() {
     setParticipants(updatedParticipants)
     setExitedParticipants(updatedExitedParticipants)
 
-    // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
-    localStorage.setItem('exitedParticipants', JSON.stringify(updatedExitedParticipants))
-
-    // DB 저장 시도
+    // Supabase 업데이트
     try {
-      const { saveParticipants, saveExitedParticipants } = await import('@/utils/database')
+      const { saveGroupingResult, saveParticipants, saveExitedParticipants } = await import('@/utils/database')
       await Promise.all([
+        saveGroupingResult(fullyUpdatedResult),
         saveParticipants(updatedParticipants),
         saveExitedParticipants(updatedExitedParticipants)
       ])
-      console.log('✅ 참가자 삭제 DB 저장 성공')
+      console.log('✅ 참가자 제거 후 데이터 저장 완료')
     } catch (error) {
-      console.warn('⚠️ 참가자 삭제 DB 저장 실패 (로컬은 정상):', error)
+      console.error('❌ 데이터 저장 중 오류:', error)
     }
+
+
 
     // 스냅샷 생성
     const { createSnapshot } = await import('@/utils/backup')
@@ -435,7 +471,7 @@ export default function ResultPage() {
   }
 
   // 두 참가자 swap 함수
-  const swapParticipants = (participant1Id: string, group1Id: number, participant2Id: string, group2Id: number) => {
+  const swapParticipants = async (participant1Id: string, group1Id: number, participant2Id: string, group2Id: number) => {
     if (!result) return
 
     const updatedGroups = result.groups.map(group => {
@@ -540,9 +576,17 @@ export default function ResultPage() {
     setResult(fullyUpdatedResult)
     setParticipants(updatedParticipants)
     
-    // localStorage 업데이트
-    localStorage.setItem('groupingResult', JSON.stringify(fullyUpdatedResult))
-    localStorage.setItem('participants', JSON.stringify(updatedParticipants))
+    // Supabase 업데이트
+    try {
+      const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
+      await Promise.all([
+        saveGroupingResult(fullyUpdatedResult),
+        saveParticipants(updatedParticipants)
+      ])
+      console.log('✅ 참가자 편집 후 데이터 저장 완료')
+    } catch (error) {
+      console.error('❌ 데이터 저장 중 오류:', error)
+    }
 
     // 성공 메시지 표시
     const p1Name = result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)?.name
@@ -595,7 +639,7 @@ export default function ResultPage() {
   }
 
   // 터치/클릭 기반 swap 처리
-  const handleParticipantClick = (participantId: string, groupId: number) => {
+  const handleParticipantClick = async (participantId: string, groupId: number) => {
     if (!swapSelectedParticipant) {
       // 첫 번째 선택
       setSwapSelectedParticipant({ id: participantId, groupId })
@@ -619,7 +663,7 @@ export default function ResultPage() {
       }
       
       // swap 실행
-      swapParticipants(
+      await swapParticipants(
         swapSelectedParticipant.id,
         swapSelectedParticipant.groupId,
         participantId,
@@ -1177,8 +1221,8 @@ export default function ResultPage() {
                 
                 
                 // 이성 만남 계산 - 이탈한 사람도 포함해서 계산
-                // localStorage에서 직접 읽어서 최신 상태 보장
-                const currentExitedParticipants = JSON.parse(localStorage.getItem('exitedParticipants') || '{}')
+                // 현재 상태에서 이탈 참가자 정보 가져오기
+                const currentExitedParticipants = exitedParticipants
                 
                 const oppositeMet = Array.from(allMetIds).filter(metId => {
                   const metPerson = participants.find(p => p.id === metId)
@@ -1565,11 +1609,7 @@ export default function ResultPage() {
             </button>
             <button
               onClick={() => {
-                localStorage.removeItem('groupingResult')
-                localStorage.removeItem('participants')
-                localStorage.removeItem('currentRound')
-                localStorage.removeItem('exitedParticipants')
-                localStorage.removeItem('groupSettings')
+                // Supabase에서는 데이터가 자동으로 유지되므로 바로 이동
                 router.push('/')
               }}
               className="bg-gray-500 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-md"
