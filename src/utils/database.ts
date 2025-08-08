@@ -590,6 +590,45 @@ export const deleteMeeting = async (meetingId: string): Promise<boolean> => {
   }
 }
 
+// 모임 이름 업데이트
+export const updateMeetingName = async (meetingId: string, newName: string): Promise<boolean> => {
+  if (!isSupabaseConfigured) {
+    console.error('Supabase가 설정되지 않았습니다. 모임 이름 변경이 불가능합니다.')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  if (!newName.trim()) {
+    console.error('모임 이름이 비어있습니다.')
+    return false
+  }
+  
+  try {
+    console.log('✏️ 모임 이름 변경 시작:', { meetingId, newName })
+    
+    const { error } = await supabase
+      .from('meetings')
+      .update({ 
+        name: newName.trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', meetingId)
+    
+    if (error) {
+      console.error('❌ 모임 이름 변경 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 모임 이름 변경 완료:', newName)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 이름 변경 중 오류:', error)
+    return false
+  }
+}
+
 // 현재 모임의 모든 데이터 삭제 (새로운 모임 시작 시 사용)
 export const clearCurrentMeetingData = async (): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()

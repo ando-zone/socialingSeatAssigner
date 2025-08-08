@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createSupabaseClient } from '@/lib/supabase'
-import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, type Meeting } from '@/utils/database'
+import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, updateMeetingName, type Meeting } from '@/utils/database'
 import type { User } from '@supabase/supabase-js'
 
 interface MeetingSelectorProps {
@@ -17,6 +17,8 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
   const [newMeetingName, setNewMeetingName] = useState('')
   const [creatingMeeting, setCreatingMeeting] = useState(false)
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
+  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
 
   useEffect(() => {
     loadMeetings()
@@ -103,6 +105,41 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
         console.error('모임 삭제 중 오류:', error)
         alert('❌ 모임 삭제 중 오류가 발생했습니다.')
       }
+    }
+  }
+
+  const handleStartEditMeeting = (meetingId: string, currentName: string, event: React.MouseEvent) => {
+    // 클릭 이벤트 전파 막기 (모임 선택 방지)
+    event.stopPropagation()
+    setEditingMeetingId(meetingId)
+    setEditingName(currentName)
+  }
+
+  const handleCancelEditMeeting = () => {
+    setEditingMeetingId(null)
+    setEditingName('')
+  }
+
+  const handleSaveEditMeeting = async (meetingId: string) => {
+    if (!editingName.trim()) {
+      alert('모임 이름을 입력해주세요.')
+      return
+    }
+
+    try {
+      const success = await updateMeetingName(meetingId, editingName.trim())
+      if (success) {
+        setEditingMeetingId(null)
+        setEditingName('')
+        // 모임 목록 새로고침
+        await loadMeetings()
+        alert('✅ 모임 이름이 성공적으로 변경되었습니다.')
+      } else {
+        alert('❌ 모임 이름 변경 중 오류가 발생했습니다.')
+      }
+    } catch (error) {
+      console.error('모임 이름 변경 중 오류:', error)
+      alert('❌ 모임 이름 변경 중 오류가 발생했습니다.')
     }
   }
 
@@ -214,27 +251,79 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
                   onClick={() => handleSelectMeeting(meeting.id)}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <h4 className="font-medium text-gray-800 flex-1 line-clamp-2">
-                      {meeting.name}
-                    </h4>
-                    <div className="flex items-center space-x-2 ml-2">
-                      {selectedMeetingId === meeting.id && (
-                        <div className="text-blue-500">
-                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
+                    {editingMeetingId === meeting.id ? (
+                      // 편집 모드
+                      <div className="flex-1 mr-2">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-800"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveEditMeeting(meeting.id)
+                            } else if (e.key === 'Escape') {
+                              handleCancelEditMeeting()
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <div className="flex justify-end space-x-2 mt-2">
+                          <button
+                            onClick={() => handleSaveEditMeeting(meeting.id)}
+                            className="text-green-600 hover:text-green-800 hover:bg-green-50 p-1 rounded transition-colors"
+                            title="저장"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={handleCancelEditMeeting}
+                            className="text-gray-500 hover:text-gray-700 hover:bg-gray-50 p-1 rounded transition-colors"
+                            title="취소"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
                         </div>
-                      )}
-                      <button
-                        onClick={(e) => handleDeleteMeeting(meeting.id, meeting.name, e)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
-                        title="모임 삭제"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      // 일반 표시 모드
+                      <>
+                        <h4 className="font-medium text-gray-800 flex-1 line-clamp-2">
+                          {meeting.name}
+                        </h4>
+                        <div className="flex items-center space-x-1 ml-2">
+                          {selectedMeetingId === meeting.id && (
+                            <div className="text-blue-500">
+                              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => handleStartEditMeeting(meeting.id, meeting.name, e)}
+                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-1 rounded transition-colors"
+                            title="이름 편집"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteMeeting(meeting.id, meeting.name, e)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                            title="모임 삭제"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                   
                   <div className="space-y-2 text-sm text-gray-600">
