@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult } from '@/utils/grouping'
+import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult, type GenderConstraint } from '@/utils/grouping'
 import { createSnapshot, exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, formatDateTime } from '@/utils/backup'
 
 export default function Home() {
@@ -17,6 +17,11 @@ export default function Home() {
   const [groupingMode, setGroupingMode] = useState<'auto' | 'manual'>('manual')
   const [numGroups, setNumGroups] = useState(6)
   const [customGroupSizes, setCustomGroupSizes] = useState<number[]>([12, 12, 12, 12, 12, 12])
+  const [customGroupGenders, setCustomGroupGenders] = useState<{maleCount: number, femaleCount: number}[]>([
+    {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+    {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+  ])
+  const [enableGenderRatio, setEnableGenderRatio] = useState(false)
   const [groupSettingsLoaded, setGroupSettingsLoaded] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [showBulkInput, setShowBulkInput] = useState(false)
@@ -109,22 +114,29 @@ export default function Home() {
     setParticipants(updatedParticipants)
   }
 
-  // 그룹 수 변경 시 customGroupSizes 배열 크기 조정
+  // 그룹 수 변경 시 customGroupSizes 및 customGroupGenders 배열 크기 조정
   const handleNumGroupsChange = (newNumGroups: number) => {
     setNumGroups(newNumGroups)
     const newSizes = [...customGroupSizes]
+    const newGenders = [...customGroupGenders]
     
     if (newNumGroups > customGroupSizes.length) {
-      // 그룹 수가 늘어나면 기본값(4명)으로 추가
+      // 그룹 수가 늘어나면 마지막 그룹의 설정을 복사하여 추가
+      const lastSize = newSizes.length > 0 ? newSizes[newSizes.length - 1] : 4
+      const lastGender = newGenders.length > 0 ? newGenders[newGenders.length - 1] : {maleCount: 2, femaleCount: 2}
+      
       while (newSizes.length < newNumGroups) {
-        newSizes.push(4)
+        newSizes.push(lastSize)
+        newGenders.push({...lastGender}) // 깊은 복사로 추가
       }
     } else if (newNumGroups < customGroupSizes.length) {
       // 그룹 수가 줄어들면 뒤에서부터 제거
       newSizes.splice(newNumGroups)
+      newGenders.splice(newNumGroups)
     }
     
     setCustomGroupSizes(newSizes)
+    setCustomGroupGenders(newGenders)
   }
 
   // 개별 그룹 크기 변경
@@ -134,6 +146,54 @@ export default function Home() {
     console.log(`🎯 그룹 ${groupIndex + 1} 크기 변경: ${customGroupSizes[groupIndex]} → ${newSize}`)
     console.log('📊 새로운 그룹 크기 배열:', newSizes)
     setCustomGroupSizes(newSizes)
+    
+    // 성비가 활성화된 경우, 그룹 크기에 맞춰 성비도 조정
+    if (enableGenderRatio) {
+      const newGenders = [...customGroupGenders]
+      const currentGender = newGenders[groupIndex]
+      const currentTotal = currentGender.maleCount + currentGender.femaleCount
+      
+      if (newSize !== currentTotal) {
+        // 기존 비율을 유지하면서 크기 조정
+        const maleRatio = currentGender.maleCount / Math.max(currentTotal, 1)
+        const newMaleCount = Math.round(newSize * maleRatio)
+        const newFemaleCount = newSize - newMaleCount
+        
+        newGenders[groupIndex] = {
+          maleCount: Math.max(0, newMaleCount),
+          femaleCount: Math.max(0, newFemaleCount)
+        }
+        setCustomGroupGenders(newGenders)
+      }
+    }
+  }
+  
+  // 개별 그룹의 남성 수 변경
+  const handleGroupMaleCountChange = (groupIndex: number, newMaleCount: number) => {
+    const newGenders = [...customGroupGenders]
+    const groupSize = customGroupSizes[groupIndex]
+    const maxMale = Math.max(0, Math.min(groupSize, newMaleCount))
+    const newFemaleCount = groupSize - maxMale
+    
+    newGenders[groupIndex] = {
+      maleCount: maxMale,
+      femaleCount: Math.max(0, newFemaleCount)
+    }
+    setCustomGroupGenders(newGenders)
+  }
+  
+  // 개별 그룹의 여성 수 변경
+  const handleGroupFemaleCountChange = (groupIndex: number, newFemaleCount: number) => {
+    const newGenders = [...customGroupGenders]
+    const groupSize = customGroupSizes[groupIndex]
+    const maxFemale = Math.max(0, Math.min(groupSize, newFemaleCount))
+    const newMaleCount = groupSize - maxFemale
+    
+    newGenders[groupIndex] = {
+      maleCount: Math.max(0, newMaleCount),
+      femaleCount: maxFemale
+    }
+    setCustomGroupGenders(newGenders)
   }
 
   // 총 예상 인원 계산
@@ -170,7 +230,18 @@ export default function Home() {
       await createSnapshot('round_start', `${currentRound}라운드 시작 전`)
       
       const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
-      const result = createOptimalGroups(participants, groupSizeParam, currentRound)
+      
+      // 성비 제약 조건 준비
+      let genderConstraints: GenderConstraint[] | undefined = undefined
+      if (groupingMode === 'manual' && enableGenderRatio) {
+        genderConstraints = customGroupGenders.map(gender => ({
+          maleCount: gender.maleCount,
+          femaleCount: gender.femaleCount
+        }))
+        console.log('🎯 성비 제약 조건 적용:', genderConstraints)
+      }
+      
+      const result = createOptimalGroups(participants, groupSizeParam, currentRound, genderConstraints)
       const updatedParticipants = updateMeetingHistory(participants, result.groups, currentRound)
       
       const nextRound = currentRound + 1
@@ -189,7 +260,9 @@ export default function Home() {
         groupingMode,
         groupSize,
         numGroups,
-        customGroupSizes
+        customGroupSizes,
+        customGroupGenders,
+        enableGenderRatio
       }
       await saveGroupSettings(groupSettings)
       
@@ -309,20 +382,104 @@ export default function Home() {
           console.log('✅ 참가자 데이터 로드:', migratedParticipants.length + '명')
         }
         
-        // 그룹 설정 복원
+        // 그룹 설정 복원 - Supabase 우선, localStorage 백업
         if (groupSettings) {
           console.log('저장된 그룹 설정 복원:', groupSettings)
           setGroupingMode(groupSettings.groupingMode || 'manual')
           setGroupSize(groupSettings.groupSize || 4)
           setNumGroups(groupSettings.numGroups || 6)
           setCustomGroupSizes(groupSettings.customGroupSizes || [12, 12, 12, 12, 12, 12])
+          
+          // 성비 설정이 Supabase에 없으면 localStorage에서 복원 시도
+          if (groupSettings.customGroupGenders) {
+            setCustomGroupGenders(groupSettings.customGroupGenders)
+          } else {
+            const localGenders = localStorage.getItem('seatAssigner_customGroupGenders')
+            if (localGenders) {
+              try {
+                setCustomGroupGenders(JSON.parse(localGenders))
+              } catch (e) {
+                setCustomGroupGenders([
+                  {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+                  {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+                ])
+              }
+            } else {
+              setCustomGroupGenders([
+                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+              ])
+            }
+          }
+          
+          // 배열 길이 동기화 확인
+          setTimeout(() => {
+            setCustomGroupSizes(prevSizes => {
+              setCustomGroupGenders(prevGenders => {
+                const targetLength = prevSizes.length;
+                const newGenders = [...prevGenders];
+                
+                // genders 배열이 sizes보다 짧으면 기본값으로 채움
+                while (newGenders.length < targetLength) {
+                  newGenders.push({maleCount: 7, femaleCount: 5});
+                }
+                
+                // genders 배열이 sizes보다 길면 자름
+                if (newGenders.length > targetLength) {
+                  newGenders.splice(targetLength);
+                }
+                
+                return newGenders;
+              });
+              return prevSizes;
+            });
+          }, 0);
+          
+          if (groupSettings.enableGenderRatio !== undefined) {
+            setEnableGenderRatio(groupSettings.enableGenderRatio)
+          } else {
+            const localEnabled = localStorage.getItem('seatAssigner_enableGenderRatio')
+            if (localEnabled) {
+              setEnableGenderRatio(localEnabled === 'true')
+            } else {
+              setEnableGenderRatio(false)
+            }
+          }
         } else {
-          // 저장된 설정이 없으면 기본값으로 초기화
-          console.log('저장된 그룹 설정이 없어 기본값 사용')
+          // 저장된 설정이 없으면 localStorage 체크 후 기본값으로 초기화
+          console.log('저장된 그룹 설정이 없어 localStorage 확인 후 기본값 사용')
           setGroupingMode('manual')
           setGroupSize(4)
           setNumGroups(6)
           setCustomGroupSizes([12, 12, 12, 12, 12, 12])
+          
+          // localStorage에서 성비 설정 복원 시도
+          const localGenders = localStorage.getItem('seatAssigner_customGroupGenders')
+          const localEnabled = localStorage.getItem('seatAssigner_enableGenderRatio')
+          
+          if (localGenders) {
+            try {
+              setCustomGroupGenders(JSON.parse(localGenders))
+              console.log('localStorage에서 성비 설정 복원됨')
+            } catch (e) {
+              setCustomGroupGenders([
+                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+              ])
+            }
+          } else {
+            setCustomGroupGenders([
+              {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+              {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+            ])
+          }
+          
+          if (localEnabled) {
+            setEnableGenderRatio(localEnabled === 'true')
+            console.log('localStorage에서 성비 체크박스 상태 복원됨:', localEnabled === 'true')
+          } else {
+            setEnableGenderRatio(false)
+          }
         }
         setGroupSettingsLoaded(true)
         
@@ -349,17 +506,33 @@ export default function Home() {
             groupingMode,
             groupSize,
             numGroups,
-            customGroupSizes
+            customGroupSizes,
+            customGroupGenders,
+            enableGenderRatio
           }
           await saveSettings(groupSettings)
-          console.log('그룹 설정 저장됨:', groupSettings)
+          
+          // localStorage에도 백업 저장 (마이그레이션 전까지 임시 사용)
+          localStorage.setItem('seatAssigner_customGroupGenders', JSON.stringify(customGroupGenders))
+          localStorage.setItem('seatAssigner_enableGenderRatio', enableGenderRatio.toString())
+          
+          console.log('그룹 설정 저장됨 (Supabase + localStorage):', groupSettings)
         } catch (error) {
           console.error('그룹 설정 저장 중 오류:', error)
+          
+          // Supabase 저장 실패 시 localStorage라도 저장
+          try {
+            localStorage.setItem('seatAssigner_customGroupGenders', JSON.stringify(customGroupGenders))
+            localStorage.setItem('seatAssigner_enableGenderRatio', enableGenderRatio.toString())
+            console.log('localStorage에 성비 설정 백업 저장 완료')
+          } catch (localError) {
+            console.error('localStorage 백업 저장도 실패:', localError)
+          }
         }
       }
       saveGroupSettings()
     }
-  }, [groupingMode, groupSize, numGroups, customGroupSizes, isInitialLoad, groupSettingsLoaded])
+  }, [groupingMode, groupSize, numGroups, customGroupSizes, customGroupGenders, enableGenderRatio, isInitialLoad, groupSettingsLoaded])
 
   // 현재 라운드 재배치 (라운드 번호는 유지하고 다시 배치)
   const regroupCurrentRound = async () => {
@@ -383,6 +556,16 @@ export default function Home() {
       
       const groupSizeParam = groupingMode === 'auto' ? groupSize : customGroupSizes
       const reGroupRound = currentRound - 1 // 현재 라운드를 다시 배치
+      
+      // 성비 제약 조건 준비
+      let genderConstraints: GenderConstraint[] | undefined = undefined
+      if (groupingMode === 'manual' && enableGenderRatio) {
+        genderConstraints = customGroupGenders.map(gender => ({
+          maleCount: gender.maleCount,
+          femaleCount: gender.femaleCount
+        }))
+        console.log('🎯 재배치 시 성비 제약 조건 적용:', genderConstraints)
+      }
       
       console.log(`🔄 ${reGroupRound}라운드 재배치 시작 - 기존 히스토리 정리 중...`)
       
@@ -418,7 +601,7 @@ export default function Home() {
       })
       
       // 새로운 그룹 배치
-      const result = createOptimalGroups(participantsForRegroup, groupSizeParam, reGroupRound)
+      const result = createOptimalGroups(participantsForRegroup, groupSizeParam, reGroupRound, genderConstraints)
       const updatedParticipants = updateMeetingHistory(participantsForRegroup, result.groups, reGroupRound)
       
       console.log(`✅ ${reGroupRound}라운드 재배치 완료 - 새로운 히스토리 적용됨`)
@@ -640,7 +823,9 @@ export default function Home() {
 • 만난 사람 기록
 • 현재 라운드 정보
 
-💾 백업 스냅샷은 유지됩니다.`
+다음 데이터는 유지됩니다:
+• 그룹 설정 (그룹 수, 크기, 성비 설정)
+• 백업 스냅샷`
 
     if (confirm(confirmMessage)) {
       try {
@@ -655,16 +840,12 @@ export default function Home() {
         
         console.log('✅ 데이터 삭제 완료, 상태 초기화 중...')
         
-        // 상태 초기화 (데이터 삭제 확인 후에만 실행)
+        // 상태 초기화 (데이터 삭제 확인 후에만 실행) - 그룹 설정은 유지
         setParticipants([])
         setCurrentRound(1)
         setName('')
         setGender('male')
         setMbti('extrovert')
-        setGroupSize(4)
-        setGroupingMode('manual')
-        setNumGroups(6)
-        setCustomGroupSizes([12, 12, 12, 12, 12, 12])
         setBulkText('')
         setShowBulkInput(false)
         setShowBackupSection(false)
@@ -672,13 +853,13 @@ export default function Home() {
         setIsInitialLoad(true)
         setGroupSettingsLoaded(false)
         
-        // localStorage도 초기화
+        // localStorage에서 참가자 관련 데이터만 초기화 (그룹 설정은 유지)
         if (typeof window !== 'undefined') {
           localStorage.removeItem('seatAssigner_participants')
           localStorage.removeItem('seatAssigner_groupingResult')
           localStorage.removeItem('seatAssigner_currentRound')
           localStorage.removeItem('seatAssigner_exitedParticipants')
-          localStorage.removeItem('seatAssigner_groupSettings')
+          // seatAssigner_groupSettings는 유지
         }
         
         // 초기화 완료 후 스냅샷 생성
@@ -979,30 +1160,118 @@ export default function Home() {
                     
                     {/* 그룹별 인원 설정 */}
                     <div className="space-y-3">
-                      <label className="block text-sm font-semibold text-gray-700">각 그룹 인원 수</label>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-sm font-semibold text-gray-700">각 그룹 설정</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id="enableGenderRatio"
+                            checked={enableGenderRatio}
+                            onChange={(e) => setEnableGenderRatio(e.target.checked)}
+                            className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                          />
+                          <label htmlFor="enableGenderRatio" className="text-xs text-gray-600">성비 개별 설정</label>
+                        </div>
+                      </div>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {customGroupSizes.map((size, index) => (
-                          <div key={index} className="flex items-center space-x-3 bg-white bg-opacity-70 p-2 rounded-lg">
-                            <div className="flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-medium">
-                              {index + 1}
+                          <div key={index} className="bg-white bg-opacity-70 p-3 rounded-lg border">
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-medium">
+                                {index + 1}
+                              </div>
+                              <span className="text-sm text-gray-600 min-w-[50px]">그룹 {index + 1}:</span>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleGroupSizeChange(index, Math.max(2, size - 1))}
+                                  className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
+                                >
+                                  -
+                                </button>
+                                <span className="w-8 text-center font-medium">{size}</span>
+                                <button
+                                  onClick={() => handleGroupSizeChange(index, Math.min(20, size + 1))}
+                                  className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
+                                >
+                                  +
+                                </button>
+                                <span className="text-sm text-gray-500">명</span>
+                              </div>
                             </div>
-                            <span className="text-sm text-gray-600 min-w-[50px]">그룹:</span>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleGroupSizeChange(index, Math.max(2, size - 1))}
-                                className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
-                              >
-                                -
-                              </button>
-                              <span className="w-8 text-center font-medium">{size}</span>
-                              <button
-                                onClick={() => handleGroupSizeChange(index, Math.min(20, size + 1))}
-                                className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-purple-600"
-                              >
-                                +
-                              </button>
-                              <span className="text-sm text-gray-500">명</span>
-                            </div>
+                            
+                            {enableGenderRatio && (
+                              <div className="mt-2 p-3 bg-gradient-to-r from-blue-50 to-pink-50 rounded-lg border border-purple-200">
+                                <div className="text-xs font-medium text-gray-700 mb-3">성비 설정</div>
+                                <div className="space-y-3">
+                                  {/* 남성 설정 */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                      <span className="text-sm text-blue-700 font-medium">남성</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        onClick={() => handleGroupMaleCountChange(index, Math.max(0, customGroupGenders[index]?.maleCount - 1))}
+                                        className="w-7 h-7 bg-blue-500 text-white rounded-md flex items-center justify-center text-sm hover:bg-blue-600 transition-colors"
+                                      >
+                                        −
+                                      </button>
+                                      <div className="w-8 text-center">
+                                        <span className="text-sm font-bold text-blue-700">{customGroupGenders[index]?.maleCount || 0}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleGroupMaleCountChange(index, Math.min(size, customGroupGenders[index]?.maleCount + 1))}
+                                        className="w-7 h-7 bg-blue-500 text-white rounded-md flex items-center justify-center text-sm hover:bg-blue-600 transition-colors"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* 여성 설정 */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
+                                      <span className="text-sm text-pink-700 font-medium">여성</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        onClick={() => handleGroupFemaleCountChange(index, Math.max(0, customGroupGenders[index]?.femaleCount - 1))}
+                                        className="w-7 h-7 bg-pink-500 text-white rounded-md flex items-center justify-center text-sm hover:bg-pink-600 transition-colors"
+                                      >
+                                        −
+                                      </button>
+                                      <div className="w-8 text-center">
+                                        <span className="text-sm font-bold text-pink-700">{customGroupGenders[index]?.femaleCount || 0}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleGroupFemaleCountChange(index, Math.min(size, customGroupGenders[index]?.femaleCount + 1))}
+                                        className="w-7 h-7 bg-pink-500 text-white rounded-md flex items-center justify-center text-sm hover:bg-pink-600 transition-colors"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* 합계 표시 */}
+                                  <div className="pt-2 border-t border-gray-200">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-600">합계</span>
+                                      <div className="flex items-center space-x-1">
+                                        <span className="font-medium text-gray-800">
+                                          {(customGroupGenders[index]?.maleCount || 0) + (customGroupGenders[index]?.femaleCount || 0)}명
+                                        </span>
+                                        {((customGroupGenders[index]?.maleCount || 0) + (customGroupGenders[index]?.femaleCount || 0)) !== size && (
+                                          <span className="text-red-600 font-medium">
+                                            ⚠️ 불일치
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

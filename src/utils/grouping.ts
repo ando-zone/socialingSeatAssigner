@@ -86,11 +86,143 @@ function shouldAvoidGroupNumber(participant: Participant, groupNumber: number): 
   return history.length > 0 && history[history.length - 1] === groupNumber
 }
 
+// 기본 배치 로직
+function assignParticipantsBasic(participants: Participant[], groups: Participant[][], currentRound: number): void {
+  const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5)
+  
+  shuffledParticipants.forEach((participant) => {
+    let bestGroupIndex = 0
+    let minGroupSize = groups[0].length
+    let foundAvoidableGroup = false
+    
+    // 이전 라운드 그룹 번호를 회피할 수 있는 그룹 찾기
+    for (let i = 0; i < groups.length; i++) {
+      const canAvoidPreviousGroup = !shouldAvoidGroupNumber(participant, i + 1)
+      
+      if (canAvoidPreviousGroup && !foundAvoidableGroup) {
+        // 이전 그룹을 회피할 수 있는 첫 번째 그룹
+        bestGroupIndex = i
+        minGroupSize = groups[i].length
+        foundAvoidableGroup = true
+      } else if (canAvoidPreviousGroup && foundAvoidableGroup) {
+        // 이전 그룹을 회피할 수 있는 그룹 중 크기가 더 작은 그룹
+        if (groups[i].length < minGroupSize) {
+          bestGroupIndex = i
+          minGroupSize = groups[i].length
+        }
+      } else if (!foundAvoidableGroup) {
+        // 이전 그룹을 회피할 수 없다면 가장 작은 그룹
+        if (groups[i].length < minGroupSize) {
+          bestGroupIndex = i
+          minGroupSize = groups[i].length
+        }
+      }
+    }
+    
+    groups[bestGroupIndex].push(participant)
+  })
+}
+
+// 성비 제약 조건을 고려한 배치 로직
+function assignParticipantsWithGenderConstraints(
+  participants: Participant[], 
+  groups: Participant[][], 
+  genderConstraints: GenderConstraint[], 
+  currentRound: number
+): { success: boolean; reason?: string } {
+  console.log('성비 제약 조건:', genderConstraints)
+  
+  // 참가자를 성별로 분리
+  const maleParticipants = participants.filter(p => p.gender === 'male')
+  const femaleParticipants = participants.filter(p => p.gender === 'female')
+  
+  console.log(`남성 참가자: ${maleParticipants.length}명, 여성 참가자: ${femaleParticipants.length}명`)
+  
+  // 총 필요한 성별별 인원 계산
+  const totalMaleNeeded = genderConstraints.reduce((sum, constraint) => sum + constraint.maleCount, 0)
+  const totalFemaleNeeded = genderConstraints.reduce((sum, constraint) => sum + constraint.femaleCount, 0)
+  
+  console.log(`필요한 남성: ${totalMaleNeeded}명, 필요한 여성: ${totalFemaleNeeded}명`)
+  
+  // 참가자 수가 부족한지 확인
+  if (maleParticipants.length < totalMaleNeeded || femaleParticipants.length < totalFemaleNeeded) {
+    return { 
+      success: false, 
+      reason: `성별 참가자 수 부족 - 남성: ${maleParticipants.length}/${totalMaleNeeded}, 여성: ${femaleParticipants.length}/${totalFemaleNeeded}`
+    }
+  }
+  
+  // 각 그룹에 성별 제약 조건에 따라 배치
+  const assignedMales = new Set<string>()
+  const assignedFemales = new Set<string>()
+  
+  for (let groupIndex = 0; groupIndex < genderConstraints.length; groupIndex++) {
+    const constraint = genderConstraints[groupIndex]
+    const group = groups[groupIndex]
+    
+    // 이 그룹에 배치할 남성들 선택
+    const availableMales = maleParticipants.filter(p => !assignedMales.has(p.id))
+    const selectedMales = selectBestParticipantsForGroup(availableMales, constraint.maleCount, groupIndex + 1)
+    
+    // 이 그룹에 배치할 여성들 선택  
+    const availableFemales = femaleParticipants.filter(p => !assignedFemales.has(p.id))
+    const selectedFemales = selectBestParticipantsForGroup(availableFemales, constraint.femaleCount, groupIndex + 1)
+    
+    // 그룹에 추가
+    selectedMales.forEach(p => {
+      group.push(p)
+      assignedMales.add(p.id)
+    })
+    selectedFemales.forEach(p => {
+      group.push(p)
+      assignedFemales.add(p.id)
+    })
+    
+    console.log(`그룹 ${groupIndex + 1}: 남성 ${selectedMales.length}명, 여성 ${selectedFemales.length}명 배치`)
+  }
+  
+  return { success: true }
+}
+
+// 그룹에 가장 적합한 참가자들을 선택하는 함수
+function selectBestParticipantsForGroup(candidates: Participant[], count: number, groupNumber: number): Participant[] {
+  if (candidates.length <= count) {
+    return [...candidates]
+  }
+  
+  // 우선순위: 이전 라운드에서 해당 그룹 번호가 아닌 사람들을 우선 선택
+  const canAvoidPrevious = candidates.filter(p => !shouldAvoidGroupNumber(p, groupNumber))
+  const mustUsePrevious = candidates.filter(p => shouldAvoidGroupNumber(p, groupNumber))
+  
+  let selected: Participant[] = []
+  
+  // 먼저 이전 그룹을 회피할 수 있는 사람들을 무작위로 선택
+  const shuffledAvoidable = [...canAvoidPrevious].sort(() => Math.random() - 0.5)
+  const neededFromAvoidable = Math.min(count, shuffledAvoidable.length)
+  selected.push(...shuffledAvoidable.slice(0, neededFromAvoidable))
+  
+  // 부족하면 이전 같은 그룹이었던 사람들도 추가
+  const remainingNeeded = count - selected.length
+  if (remainingNeeded > 0) {
+    const shuffledMustUse = [...mustUsePrevious].sort(() => Math.random() - 0.5)
+    selected.push(...shuffledMustUse.slice(0, remainingNeeded))
+  }
+  
+  return selected
+}
+
+// 성비 제약 조건 인터페이스
+export interface GenderConstraint {
+  maleCount: number
+  femaleCount: number
+}
+
 // 최적화된 그룹 배치 알고리즘
 export function createOptimalGroups(
   participants: Participant[], 
   groupSizeOrSizes: number | number[] = 4,
-  currentRound: number = 1
+  currentRound: number = 1,
+  genderConstraints?: GenderConstraint[]
 ): GroupingResult {
   if (participants.length < 2) {
     throw new Error('최소 2명 이상의 참가자가 필요합니다.')
@@ -120,41 +252,20 @@ export function createOptimalGroups(
   // 그룹 배열 초기화
   const groups: Participant[][] = Array.from({ length: numGroups }, () => [])
 
-  // 참가자를 그룹에 배치 (이전 라운드 그룹 번호 회피 고려)
-  const shuffledParticipants = [...participants].sort(() => Math.random() - 0.5)
-  
-  // 각 참가자를 적절한 그룹에 배치
-  shuffledParticipants.forEach((participant) => {
-    let bestGroupIndex = 0
-    let minGroupSize = groups[0].length
-    let foundAvoidableGroup = false
-    
-    // 이전 라운드 그룹 번호를 회피할 수 있는 그룹 찾기
-    for (let i = 0; i < numGroups; i++) {
-      const canAvoidPreviousGroup = !shouldAvoidGroupNumber(participant, i + 1)
-      
-      if (canAvoidPreviousGroup && !foundAvoidableGroup) {
-        // 이전 그룹을 회피할 수 있는 첫 번째 그룹
-        bestGroupIndex = i
-        minGroupSize = groups[i].length
-        foundAvoidableGroup = true
-      } else if (canAvoidPreviousGroup && foundAvoidableGroup) {
-        // 이전 그룹을 회피할 수 있는 그룹 중 크기가 더 작은 그룹
-        if (groups[i].length < minGroupSize) {
-          bestGroupIndex = i
-          minGroupSize = groups[i].length
-        }
-      } else if (!foundAvoidableGroup) {
-        // 이전 그룹을 회피할 수 없다면 가장 작은 그룹
-        if (groups[i].length < minGroupSize) {
-          bestGroupIndex = i
-          minGroupSize = groups[i].length
-        }
-      }
+  // 성비 제약 조건이 있는 경우 특별한 배치 로직 사용
+  if (genderConstraints && genderConstraints.length === numGroups) {
+    // 성비 제약 조건에 따른 배치
+    console.log('🎯 성비 제약 조건을 적용한 그룹 배치 시작')
+    const result = assignParticipantsWithGenderConstraints(participants, groups, genderConstraints, currentRound)
+    if (!result.success) {
+      console.warn('⚠️ 성비 제약 조건 배치 실패, 기본 배치로 전환:', result.reason)
+      // 기본 배치로 폴백
+      assignParticipantsBasic(participants, groups, currentRound)
     }
-    
-    groups[bestGroupIndex].push(participant)
-  })
+  } else {
+    // 기본 배치 로직
+    assignParticipantsBasic(participants, groups, currentRound)
+  }
 
   console.log('초기 배치 완료:', groups.map(g => g.length))
   

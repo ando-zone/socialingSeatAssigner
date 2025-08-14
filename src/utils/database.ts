@@ -383,6 +383,8 @@ export const saveGroupSettings = async (settings: {
   groupSize: number
   numGroups: number
   customGroupSizes: number[]
+  customGroupGenders: {maleCount: number, femaleCount: number}[]
+  enableGenderRatio: boolean
 }): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()
   if (!meetingId) return false
@@ -397,16 +399,44 @@ export const saveGroupSettings = async (settings: {
       .delete()
       .eq('meeting_id', meetingId)
 
-    // 새 설정 저장
-    const { error } = await supabase
+    // 새 설정 저장 - 먼저 기본 설정만으로 시도
+    let insertData: any = {
+      meeting_id: meetingId,
+      grouping_mode: settings.groupingMode,
+      group_size: settings.groupSize,
+      num_groups: settings.numGroups,
+      custom_group_sizes: settings.customGroupSizes
+    }
+    
+    let { error } = await supabase
       .from('group_settings')
-      .insert({
-        meeting_id: meetingId,
-        grouping_mode: settings.groupingMode,
-        group_size: settings.groupSize,
-        num_groups: settings.numGroups,
-        custom_group_sizes: settings.customGroupSizes
-      })
+      .insert(insertData)
+    
+    // 기본 설정 저장에 성공했고, 새로운 컬럼이 있다면 업데이트 시도
+    if (!error) {
+      try {
+        const updateData: any = {}
+        if (settings.customGroupGenders) {
+          updateData.custom_group_genders = settings.customGroupGenders
+        }
+        if (settings.enableGenderRatio !== undefined) {
+          updateData.enable_gender_ratio = settings.enableGenderRatio
+        }
+        
+        if (Object.keys(updateData).length > 0) {
+          const { error: updateError } = await supabase
+            .from('group_settings')
+            .update(updateData)
+            .eq('meeting_id', meetingId)
+          
+          if (updateError) {
+            console.log('성비 설정 저장 건너뜀 (마이그레이션 필요):', updateError.message)
+          }
+        }
+      } catch (updateErr) {
+        console.log('성비 설정 업데이트 건너뜀 (마이그레이션 필요)')
+      }
+    }
 
     if (error) throw error
     return true
@@ -421,6 +451,8 @@ export const getGroupSettings = async (): Promise<{
   groupSize: number
   numGroups: number
   customGroupSizes: number[]
+  customGroupGenders: {maleCount: number, femaleCount: number}[]
+  enableGenderRatio: boolean
 } | null> => {
   const meetingId = getCurrentMeetingId()
   if (!meetingId) return null
@@ -449,7 +481,12 @@ export const getGroupSettings = async (): Promise<{
       groupingMode: settings.grouping_mode,
       groupSize: settings.group_size,
       numGroups: settings.num_groups,
-      customGroupSizes: settings.custom_group_sizes
+      customGroupSizes: settings.custom_group_sizes,
+      customGroupGenders: settings.custom_group_genders || [
+        {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
+        {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
+      ],
+      enableGenderRatio: settings.enable_gender_ratio || false
     }
   } catch (error) {
     console.error('그룹 설정 조회 중 오류:', error)

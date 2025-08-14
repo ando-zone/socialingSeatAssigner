@@ -51,6 +51,8 @@ create table public.group_settings (
   group_size integer default 4 not null,
   num_groups integer default 6 not null,
   custom_group_sizes integer[] default array[]::integer[] not null,
+  custom_group_genders jsonb default '[]'::jsonb not null,
+  enable_gender_ratio boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
