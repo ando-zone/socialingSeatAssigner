@@ -1177,7 +1177,7 @@ export default function Home() {
                         {customGroupSizes.map((size, index) => (
                           <div key={index} className="bg-white bg-opacity-70 p-3 rounded-lg border">
                             <div className="flex items-center space-x-3 mb-2">
-                              <div className="flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-medium">
+                              <div className="flex items-center justify-center min-w-[2rem] w-8 h-8 bg-purple-100 text-purple-600 rounded-full text-sm font-medium flex-shrink-0">
                                 {index + 1}
                               </div>
                               <span className="text-sm text-gray-600 min-w-[50px]">그룹 {index + 1}:</span>
