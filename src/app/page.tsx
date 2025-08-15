@@ -737,16 +737,10 @@ export default function Home() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       
-      setNotification({
-        type: 'success',
-        message: '데이터가 성공적으로 내보내졌습니다.'
-      })
+      alert('데이터가 성공적으로 내보내졌습니다.')
     } catch (error) {
       console.error('데이터 내보내기 실패:', error)
-      setNotification({
-        type: 'error',
-        message: '데이터 내보내기에 실패했습니다.'
-      })
+      alert('데이터 내보내기에 실패했습니다.')
     }
   }
 
