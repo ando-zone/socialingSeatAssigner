@@ -724,8 +724,30 @@ export default function Home() {
   }
 
   // 백업 관련 함수들
-  const handleExportData = () => {
-    exportToJSON()
+  const handleExportData = async () => {
+    try {
+      const jsonData = await exportToJSON()
+      const blob = new Blob([jsonData], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `socializing-data-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      setNotification({
+        type: 'success',
+        message: '데이터가 성공적으로 내보내졌습니다.'
+      })
+    } catch (error) {
+      console.error('데이터 내보내기 실패:', error)
+      setNotification({
+        type: 'error',
+        message: '데이터 내보내기에 실패했습니다.'
+      })
+    }
   }
 
   const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
