@@ -307,6 +307,65 @@ export const getGroupingResult = async (): Promise<GroupingResult | null> => {
   }
 }
 
+// 특정 라운드의 그룹 배치 결과 조회
+export const getGroupingResultByRound = async (round: number): Promise<GroupingResult | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return null
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return null
+  
+  try {
+    const { data, error } = await supabase
+      .from('grouping_results')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .eq('round', round)
+      .limit(1)
+
+    if (error) throw error
+
+    if (!data || data.length === 0) {
+      console.log(`${round}라운드 그룹 배치 결과가 없습니다.`)
+      return null
+    }
+
+    const result = data[0]
+    return {
+      groups: result.groups,
+      round: result.round,
+      summary: result.summary
+    }
+  } catch (error) {
+    console.error(`${round}라운드 그룹 배치 결과 조회 중 오류:`, error)
+    return null
+  }
+}
+
+// 모든 라운드 목록 조회
+export const getAllRounds = async (): Promise<number[]> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return []
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return []
+  
+  try {
+    const { data, error } = await supabase
+      .from('grouping_results')
+      .select('round')
+      .eq('meeting_id', meetingId)
+      .order('round', { ascending: true })
+
+    if (error) throw error
+
+    return (data || []).map(item => item.round).filter((round, index, self) => self.indexOf(round) === index)
+  } catch (error) {
+    console.error('라운드 목록 조회 중 오류:', error)
+    return []
+  }
+}
+
 // ===== 이탈 참가자(ExitedParticipants) 관련 함수들 =====
 
 export const saveExitedParticipants = async (exitedParticipants: {[id: string]: {name: string, gender: 'male' | 'female'}}): Promise<boolean> => {

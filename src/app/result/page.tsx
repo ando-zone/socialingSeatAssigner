@@ -20,7 +20,7 @@ export default function ResultPage() {
   })
   const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)
   const [swapMessage, setSwapMessage] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>('groups')
+  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating' | 'history'>('groups')
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
   const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)
   const [isMobile, setIsMobile] = useState(false)
@@ -30,6 +30,9 @@ export default function ResultPage() {
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })
+  const [availableRounds, setAvailableRounds] = useState<number[]>([])
+  const [selectedHistoryRound, setSelectedHistoryRound] = useState<number | null>(null)
+  const [historyResult, setHistoryResult] = useState<GroupingResult | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -38,7 +41,8 @@ export default function ResultPage() {
           getGroupingResult, 
           getParticipants, 
           getExitedParticipants,
-          getCurrentMeetingId
+          getCurrentMeetingId,
+          getAllRounds
         } = await import('@/utils/database')
         
         const meetingId = getCurrentMeetingId()
@@ -50,10 +54,11 @@ export default function ResultPage() {
         
         console.log('📥 결과 페이지 데이터 로딩 중...')
         
-        const [groupingResult, participants, exitedParticipants] = await Promise.all([
+        const [groupingResult, participants, exitedParticipants, rounds] = await Promise.all([
           getGroupingResult(),
           getParticipants(),
-          getExitedParticipants()
+          getExitedParticipants(),
+          getAllRounds()
         ])
         
         if (groupingResult && participants.length > 0) {
@@ -65,6 +70,7 @@ export default function ResultPage() {
           
           setResult(groupingResult)
           setParticipants(migratedParticipants)
+          setAvailableRounds(rounds)
           
           console.log('✅ 결과 페이지 데이터 로드 완료')
         } else {
@@ -79,6 +85,24 @@ export default function ResultPage() {
     
     loadData()
   }, [router])
+
+  // 히스토리 라운드 선택 함수
+  const selectHistoryRound = async (round: number) => {
+    try {
+      const { getGroupingResultByRound } = await import('@/utils/database')
+      const roundResult = await getGroupingResultByRound(round)
+      
+      if (roundResult) {
+        setSelectedHistoryRound(round)
+        setHistoryResult(roundResult)
+        console.log(`${round}라운드 히스토리 로드 완료`)
+      } else {
+        console.log(`${round}라운드 데이터를 찾을 수 없습니다.`)
+      }
+    } catch (error) {
+      console.error('히스토리 라운드 로드 중 오류:', error)
+    }
+  }
 
   // 모바일 환경 감지
   useEffect(() => {
@@ -766,6 +790,17 @@ export default function ResultPage() {
             >
               <span className="text-lg mr-2">📊</span>
               참가자 통계
+            </button>
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
+                activeTab === 'history'
+                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span className="text-lg mr-2">📜</span>
+              라운드 히스토리
             </button>
           </div>
         </div>
@@ -1595,6 +1630,215 @@ export default function ResultPage() {
                 </>
               )
             })()}
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-6">
+            {/* 라운드 선택 섹션 */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h2 className="text-xl font-semibold mb-4 flex items-center">
+                <span className="text-purple-500 mr-2">📜</span>
+                라운드 히스토리
+              </h2>
+              <p className="text-gray-600 mb-4">지난 라운드들의 그룹 배치 결과를 확인할 수 있습니다.</p>
+              
+              {availableRounds.length > 0 ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      확인할 라운드를 선택하세요:
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {availableRounds.map(round => (
+                        <button
+                          key={round}
+                          onClick={() => selectHistoryRound(round)}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            selectedHistoryRound === round
+                              ? 'bg-purple-600 text-white'
+                              : round === result?.round
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {round}라운드
+                          {round === result?.round && (
+                            <span className="ml-1 text-xs">(현재)</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-gray-400 text-4xl mb-2">📭</div>
+                  <p className="text-gray-500">아직 저장된 라운드 히스토리가 없습니다.</p>
+                </div>
+              )}
+            </div>
+
+            {/* 선택된 라운드 결과 표시 */}
+            {selectedHistoryRound && historyResult && (
+              <div className="space-y-6">
+                {/* 히스토리 라운드 요약 */}
+                <div className="bg-white rounded-lg shadow-md p-6">
+                  <h3 className="text-xl font-semibold mb-4 flex items-center">
+                    <span className="text-purple-500 mr-2">🎯</span>
+                    {selectedHistoryRound}라운드 결과 요약
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{historyResult.summary.totalGroups}</div>
+                      <div className="text-sm text-gray-600">총 그룹 수</div>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{historyResult.summary.newMeetingsCount}</div>
+                      <div className="text-sm text-gray-600">새로운 만남</div>
+                    </div>
+                    <div className="text-center p-4 bg-purple-50 rounded-lg">
+                      <div className={`text-2xl font-bold ${getBalanceColor(historyResult.summary.genderBalanceScore)}`}>
+                        {historyResult.summary.genderBalanceScore}%
+                      </div>
+                      <div className="text-sm text-gray-600">성별 균형</div>
+                    </div>
+                    <div className="text-center p-4 bg-orange-50 rounded-lg">
+                      <div className={`text-2xl font-bold ${getBalanceColor(historyResult.summary.mbtiBalanceScore)}`}>
+                        {historyResult.summary.mbtiBalanceScore}%
+                      </div>
+                      <div className="text-sm text-gray-600">MBTI 균형</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 히스토리 라운드 그룹별 상세 결과 (읽기 전용) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {historyResult.groups.filter(group => group.members.length > 0).map((group) => (
+                    <div key={group.id} className="bg-white rounded-lg shadow-md p-6 opacity-90">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-lg font-semibold text-gray-800">
+                          그룹 {group.id}
+                        </h4>
+                        <span className="text-sm text-gray-500">
+                          {group.members.length}명
+                        </span>
+                      </div>
+
+                      {/* 그룹 균형 표시 */}
+                      <div className="mb-4 p-3 bg-gray-50 rounded-md">
+                        <div className="space-y-3">
+                          {/* 성별 비율 */}
+                          <div>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-medium text-gray-700">성별 비율</span>
+                              <span className="text-xs text-gray-500">남 {group.maleCount} · 여 {group.femaleCount}</span>
+                            </div>
+                            <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
+                              {group.maleCount > 0 && (
+                                <div 
+                                  className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium"
+                                  style={{ width: `${(group.maleCount / group.members.length) * 100}%` }}
+                                >
+                                  {group.maleCount > 0 && group.members.length > 3 && (
+                                    <span>{group.maleCount}</span>
+                                  )}
+                                </div>
+                              )}
+                              {group.femaleCount > 0 && (
+                                <div 
+                                  className="bg-pink-500 flex items-center justify-center text-white text-xs font-medium"
+                                  style={{ width: `${(group.femaleCount / group.members.length) * 100}%` }}
+                                >
+                                  {group.femaleCount > 0 && group.members.length > 3 && (
+                                    <span>{group.femaleCount}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* MBTI 비율 */}
+                          <div>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-medium text-gray-700">MBTI 비율</span>
+                              <span className="text-xs text-gray-500">외향 {group.extrovertCount} · 내향 {group.introvertCount}</span>
+                            </div>
+                            <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
+                              {group.extrovertCount > 0 && (
+                                <div 
+                                  className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium"
+                                  style={{ width: `${(group.extrovertCount / group.members.length) * 100}%` }}
+                                >
+                                  {group.extrovertCount > 0 && group.members.length > 3 && (
+                                    <span>{group.extrovertCount}</span>
+                                  )}
+                                </div>
+                              )}
+                              {group.introvertCount > 0 && (
+                                <div 
+                                  className="bg-purple-500 flex items-center justify-center text-white text-xs font-medium"
+                                  style={{ width: `${(group.introvertCount / group.members.length) * 100}%` }}
+                                >
+                                  {group.introvertCount > 0 && group.members.length > 3 && (
+                                    <span>{group.introvertCount}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 그룹 멤버 목록 (읽기 전용) */}
+                      <div className="space-y-2">
+                        {group.members.map((member) => (
+                          <div 
+                            key={member.id} 
+                            className="border border-gray-200 rounded p-2 bg-gray-50"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-medium">{member.name}</span>
+                                <div className="text-xs text-gray-500">
+                                  {member.gender === 'male' ? '남성' : '여성'} · {' '}
+                                  {member.mbti === 'extrovert' ? '외향' : '내향'}
+                                </div>
+                              </div>
+                              <div className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                                그룹 {group.id}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 새로운 만남 표시 */}
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-xs text-green-600">
+                          새로운 만남: {group.newMeetingsCount}쌍
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 히스토리 안내 메시지 */}
+                <div className="bg-purple-50 border-l-4 border-purple-400 p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <div className="text-purple-400 text-lg">📖</div>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-purple-700">
+                        <strong>히스토리 모드:</strong> 이 화면은 {selectedHistoryRound}라운드의 과거 결과를 보여줍니다. 
+                        편집이나 수정은 현재 라운드에서만 가능합니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
