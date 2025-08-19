@@ -365,6 +365,13 @@ export default function Home() {
           getGroupingResult(),
           getGroupSettings()
         ])
+
+        console.log('🔍 로드된 데이터:', {
+          participantsCount: participants.length,
+          hasGroupingResult: !!groupingResult,
+          groupSettingsLoaded: !!groupSettings,
+          groupSettings: groupSettings
+        })
         
         // 기존 결과가 있는지 확인
         setHasExistingResult(!!groupingResult)
@@ -388,7 +395,7 @@ export default function Home() {
           setGroupingMode(groupSettings.groupingMode || 'manual')
           setGroupSize(groupSettings.groupSize || 4)
           setNumGroups(groupSettings.numGroups || 6)
-          setCustomGroupSizes(groupSettings.customGroupSizes || [12, 12, 12, 12, 12, 12])
+          setCustomGroupSizes(groupSettings.customGroupSizes || Array(groupSettings.numGroups || 6).fill(groupSettings.groupSize || 4))
           
           // 성비 설정이 Supabase에 없으면 localStorage에서 복원 시도
           if (groupSettings.customGroupGenders) {
@@ -399,16 +406,16 @@ export default function Home() {
               try {
                 setCustomGroupGenders(JSON.parse(localGenders))
               } catch (e) {
-                setCustomGroupGenders([
-                  {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
-                  {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-                ])
+                const numGroups = groupSettings.numGroups || 6
+                const defaultMale = Math.ceil((groupSettings.groupSize || 4) * 0.6)
+                const defaultFemale = (groupSettings.groupSize || 4) - defaultMale
+                setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
               }
             } else {
-              setCustomGroupGenders([
-                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
-                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-              ])
+              const numGroups = groupSettings.numGroups || 6
+              const defaultMale = Math.ceil((groupSettings.groupSize || 4) * 0.6)
+              const defaultFemale = (groupSettings.groupSize || 4) - defaultMale
+              setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
             }
           }
           
@@ -451,7 +458,24 @@ export default function Home() {
           setGroupingMode('manual')
           setGroupSize(4)
           setNumGroups(6)
-          setCustomGroupSizes([12, 12, 12, 12, 12, 12])
+          // localStorage에서 이전 설정 확인
+          const localGroupSizes = localStorage.getItem('seatAssigner_customGroupSizes')
+          const localNumGroups = localStorage.getItem('seatAssigner_numGroups')
+          const localGroupSize = localStorage.getItem('seatAssigner_groupSize')
+          
+          if (localGroupSizes) {
+            try {
+              setCustomGroupSizes(JSON.parse(localGroupSizes))
+            } catch (e) {
+              const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
+              const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
+              setCustomGroupSizes(Array(numGroups).fill(groupSize))
+            }
+          } else {
+            const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
+            const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
+            setCustomGroupSizes(Array(numGroups).fill(groupSize))
+          }
           
           // localStorage에서 성비 설정 복원 시도
           const localGenders = localStorage.getItem('seatAssigner_customGroupGenders')
@@ -462,16 +486,18 @@ export default function Home() {
               setCustomGroupGenders(JSON.parse(localGenders))
               console.log('localStorage에서 성비 설정 복원됨')
             } catch (e) {
-              setCustomGroupGenders([
-                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
-                {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-              ])
+              const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
+              const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
+              const defaultMale = Math.ceil(groupSize * 0.6)
+              const defaultFemale = groupSize - defaultMale
+              setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
             }
           } else {
-            setCustomGroupGenders([
-              {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
-              {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-            ])
+            const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
+            const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
+            const defaultMale = Math.ceil(groupSize * 0.6)
+            const defaultFemale = groupSize - defaultMale
+            setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
           }
           
           if (localEnabled) {

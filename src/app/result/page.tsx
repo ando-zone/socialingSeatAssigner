@@ -33,6 +33,8 @@ export default function ResultPage() {
   const [availableRounds, setAvailableRounds] = useState<number[]>([])
   const [selectedHistoryRound, setSelectedHistoryRound] = useState<number | null>(null)
   const [historyResult, setHistoryResult] = useState<GroupingResult | null>(null)
+  const [selectedGroupsRound, setSelectedGroupsRound] = useState<number | null>(null)
+  const [groupsRoundResult, setGroupsRoundResult] = useState<GroupingResult | null>(null)
   const [checkInStatus, setCheckInStatus] = useState<{[participantId: string]: boolean}>({})
 
   useEffect(() => {
@@ -114,6 +116,30 @@ export default function ResultPage() {
     } catch (error) {
       console.error('히스토리 라운드 로드 중 오류:', error)
     }
+  }
+
+  // Groups 탭 라운드 선택 함수
+  const selectGroupsRound = async (round: number) => {
+    try {
+      const { getGroupingResultByRound } = await import('@/utils/database')
+      const roundResult = await getGroupingResultByRound(round)
+      
+      if (roundResult) {
+        setSelectedGroupsRound(round)
+        setGroupsRoundResult(roundResult)
+        console.log(`${round}라운드 결과 로드 완료`)
+      } else {
+        console.log(`${round}라운드 데이터를 찾을 수 없습니다.`)
+      }
+    } catch (error) {
+      console.error('그룹 라운드 로드 중 오류:', error)
+    }
+  }
+
+  // 현재 라운드로 돌아가기
+  const returnToCurrentRound = () => {
+    setSelectedGroupsRound(null)
+    setGroupsRoundResult(null)
   }
 
   // 참가자 체크인 상태 토글
@@ -875,11 +901,66 @@ export default function ResultPage() {
 
         {activeTab === 'groups' && (
           <>
+            {/* 표시할 결과 결정 */}
+            {(() => {
+              const displayResult = selectedGroupsRound && groupsRoundResult ? groupsRoundResult : result
+              const isViewingPastRound = selectedGroupsRound && selectedGroupsRound !== result?.round
+              
+              return (
+                <>
+            {/* 라운드 선택 섹션 */}
+            {availableRounds.length > 1 && (
+              <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium text-gray-700">라운드 선택:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {availableRounds.map(round => (
+                        <button
+                          key={round}
+                          onClick={() => round === result?.round ? returnToCurrentRound() : selectGroupsRound(round)}
+                          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                            selectedGroupsRound === round
+                              ? 'bg-blue-600 text-white'
+                              : round === result?.round && !selectedGroupsRound
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {round}라운드
+                          {round === result?.round && (
+                            <span className="ml-1 text-xs">(현재)</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                    <button
+                      onClick={returnToCurrentRound}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    >
+                      <span>🔄</span>
+                      <span>현재 라운드로</span>
+                    </button>
+                  )}
+                </div>
+                {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                  <div className="mt-3 p-2 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-700">
+                      <strong>📜 과거 결과:</strong> 이 화면은 {selectedGroupsRound}라운드의 과거 결과를 보여줍니다. 
+                      편집이나 수정은 현재 라운드에서만 가능합니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 요약 통계 */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">배치 요약</h2>
-            {participants.length > 0 && (
+            {participants.length > 0 && !isViewingPastRound && (
               <button
                 onClick={resetAllCheckIn}
                 className="text-sm bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
@@ -891,11 +972,11 @@ export default function ResultPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{result.summary.totalGroups}</div>
+              <div className="text-2xl font-bold text-blue-600">{displayResult.summary.totalGroups}</div>
               <div className="text-sm text-gray-600">총 그룹 수</div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{result.summary.newMeetingsCount}</div>
+              <div className="text-2xl font-bold text-green-600">{displayResult.summary.newMeetingsCount}</div>
               <div className="text-sm text-gray-600">새로운 만남</div>
             </div>
             <div className="text-center p-4 bg-emerald-50 rounded-lg">
@@ -909,7 +990,7 @@ export default function ResultPage() {
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <div className={`text-2xl font-bold ${getBalanceColor(result.summary.genderBalanceScore)}`}>
-                {result.summary.genderBalanceScore}%
+                {displayResult.summary.genderBalanceScore}%
               </div>
               <div className="text-sm text-gray-600">성별 균형</div>
               <div className={`text-xs ${getBalanceColor(result.summary.genderBalanceScore)}`}>
@@ -918,7 +999,7 @@ export default function ResultPage() {
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg">
               <div className={`text-2xl font-bold ${getBalanceColor(result.summary.mbtiBalanceScore)}`}>
-                {result.summary.mbtiBalanceScore}%
+                {displayResult.summary.mbtiBalanceScore}%
               </div>
               <div className="text-sm text-gray-600">MBTI 균형</div>
               <div className={`text-xs ${getBalanceColor(result.summary.mbtiBalanceScore)}`}>
@@ -989,7 +1070,7 @@ export default function ResultPage() {
 
         {/* 그룹별 상세 결과 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {result.groups.filter(group => group.members.length > 0).map((group) => (
+          {displayResult.groups.filter(group => group.members.length > 0).map((group) => (
             <div key={group.id} className="bg-white rounded-lg shadow-md p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold text-gray-800">
@@ -1179,15 +1260,18 @@ export default function ResultPage() {
                         // 일반 모드
                         <div className="flex items-center justify-between p-2">
                           <div 
-                            draggable={!isMobile && !swapSelectedParticipant}
-                            onDragStart={!isMobile && !swapSelectedParticipant ? () => handleDragStart(member.id, group.id) : undefined}
-                            onDragOver={!isMobile ? handleDragOver : undefined}
-                            onDrop={!isMobile ? () => handleDrop(member.id, group.id) : undefined}
-                            onClick={isMobile && !swapSelectedParticipant ? () => handleParticipantClick(member.id, group.id) : undefined}
+                            draggable={!isMobile && !swapSelectedParticipant && !isViewingPastRound}
+                            onDragStart={!isMobile && !swapSelectedParticipant && !isViewingPastRound ? () => handleDragStart(member.id, group.id) : undefined}
+                            onDragOver={!isMobile && !isViewingPastRound ? handleDragOver : undefined}
+                            onDrop={!isMobile && !isViewingPastRound ? () => handleDrop(member.id, group.id) : undefined}
+                            onClick={isMobile && !swapSelectedParticipant && !isViewingPastRound ? () => handleParticipantClick(member.id, group.id) : undefined}
                             className={`flex-1 ${
-                              !swapSelectedParticipant ? (isMobile ? 'cursor-pointer' : 'cursor-move') : 'cursor-default'
+                              isViewingPastRound 
+                                ? 'cursor-default' 
+                                : !swapSelectedParticipant ? (isMobile ? 'cursor-pointer' : 'cursor-move') : 'cursor-default'
                             }`}
                             title={
+                              isViewingPastRound ? '과거 라운드 - 편집 불가' :
                               isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
                               isSwapTarget ? `${member.name}과 위치 바꾸기` :
                               !swapSelectedParticipant && isMobile ? '터치해서 선택' :
@@ -1235,12 +1319,15 @@ export default function ResultPage() {
                             {!isSelected && !isSwapTarget && (
                               <div className="flex gap-1">
                                 <button
+                                  disabled={isViewingPastRound}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     toggleCheckIn(member.id)
                                   }}
                                   className={`text-sm px-2 py-1 rounded transition-colors ${
-                                    isCheckedIn 
+                                    isViewingPastRound 
+                                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                      : isCheckedIn 
                                       ? 'text-red-600 hover:text-red-800 hover:bg-red-100' 
                                       : 'text-green-600 hover:text-green-800 hover:bg-green-100'
                                   }`}
@@ -1249,15 +1336,25 @@ export default function ResultPage() {
                                   {isCheckedIn ? '📤' : '📥'}
                                 </button>
                                 <button
+                                  disabled={isViewingPastRound}
                                   onClick={() => startEditParticipant(member.id)}
-                                  className="text-purple-500 hover:text-purple-700 text-xs px-1 py-1 rounded hover:bg-purple-100 transition-colors"
+                                  className={`text-xs px-1 py-1 rounded transition-colors ${
+                                    isViewingPastRound 
+                                      ? 'text-gray-400 cursor-not-allowed' 
+                                      : 'text-purple-500 hover:text-purple-700 hover:bg-purple-100'
+                                  }`}
                                   title="참가자 정보 수정"
                                 >
                                   ✏️
                                 </button>
                                 <button
+                                  disabled={isViewingPastRound}
                                   onClick={() => deleteParticipant(member.id)}
-                                  className="text-red-500 hover:text-red-700 text-xs px-1 py-1 rounded hover:bg-red-100 transition-colors"
+                                  className={`text-xs px-1 py-1 rounded transition-colors ${
+                                    isViewingPastRound 
+                                      ? 'text-gray-400 cursor-not-allowed' 
+                                      : 'text-red-500 hover:text-red-700 hover:bg-red-100'
+                                  }`}
                                   title="참가자 삭제"
                                 >
                                   🗑️
@@ -1321,7 +1418,7 @@ export default function ResultPage() {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : !isViewingPastRound ? (
                   <button
                     onClick={() => setShowAddForm(group.id)}
                     className="w-full p-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
@@ -1331,7 +1428,7 @@ export default function ResultPage() {
                       <span className="text-sm">참가자 추가</span>
                     </div>
                   </button>
-                )}
+                ) : null}
               </div>
 
               {/* 새로운 만남 표시 */}
@@ -1343,22 +1440,119 @@ export default function ResultPage() {
             </div>
           ))}
         </div>
-
+                </>
+              )
+            })()}
           </>
         )}
 
         {activeTab === 'seating' && result && (
+          <div className="space-y-6">
+            {/* 라운드 선택 섹션 */}
+            {availableRounds.length > 1 && (
+              <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium text-gray-700">라운드 선택:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {availableRounds.map(round => (
+                        <button
+                          key={round}
+                          onClick={() => round === result?.round ? returnToCurrentRound() : selectGroupsRound(round)}
+                          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                            selectedGroupsRound === round
+                              ? 'bg-blue-600 text-white'
+                              : round === result?.round && !selectedGroupsRound
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {round}라운드
+                          {round === result?.round && (
+                            <span className="ml-1 text-xs">(현재)</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                    <button
+                      onClick={returnToCurrentRound}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    >
+                      <span>🔄</span>
+                      <span>현재 라운드로</span>
+                    </button>
+                  )}
+                </div>
+                {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                  <div className="mt-3 p-2 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-700">
+                      <strong>🪑 과거 좌석:</strong> 이 화면은 {selectedGroupsRound}라운드의 과거 좌석 배치를 보여줍니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            
           <SeatingChart 
-            groups={result.groups} 
+            groups={(selectedGroupsRound && groupsRoundResult ? groupsRoundResult : result).groups} 
             participants={participants}
             checkInStatus={checkInStatus}
             onToggleCheckIn={toggleCheckIn}
             onPrint={() => window.print()}
           />
+          </div>
         )}
 
         {activeTab === 'stats' && (
           <div className="space-y-6">
+            {/* 라운드 선택 섹션 */}
+            {availableRounds.length > 1 && (
+              <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium text-gray-700">라운드 선택:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {availableRounds.map(round => (
+                        <button
+                          key={round}
+                          onClick={() => round === result?.round ? returnToCurrentRound() : selectGroupsRound(round)}
+                          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                            selectedGroupsRound === round
+                              ? 'bg-blue-600 text-white'
+                              : round === result?.round && !selectedGroupsRound
+                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {round}라운드
+                          {round === result?.round && (
+                            <span className="ml-1 text-xs">(현재)</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                    <button
+                      onClick={returnToCurrentRound}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    >
+                      <span>🔄</span>
+                      <span>현재 라운드로</span>
+                    </button>
+                  )}
+                </div>
+                {selectedGroupsRound && selectedGroupsRound !== result?.round && (
+                  <div className="mt-3 p-2 bg-blue-50 rounded-md">
+                    <p className="text-sm text-blue-700">
+                      <strong>📊 과거 통계:</strong> 이 화면은 {selectedGroupsRound}라운드의 과거 통계를 보여줍니다.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             {/* 참가자 통계 계산 */}
             {(() => {
               const participantStats = participants.map(participant => {
