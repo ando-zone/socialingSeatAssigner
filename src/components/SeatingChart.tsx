@@ -22,10 +22,12 @@ interface TableLayout {
 interface SeatingChartProps {
   groups: Group[]
   participants: Participant[]
+  checkInStatus: {[participantId: string]: boolean}
+  onToggleCheckIn: (participantId: string) => void
   onPrint?: () => void
 }
 
-export default function SeatingChart({ groups, participants, onPrint }: SeatingChartProps) {
+export default function SeatingChart({ groups, participants, checkInStatus, onToggleCheckIn, onPrint }: SeatingChartProps) {
   // 테이블당 최대 좌석 수 (사각 테이블 기준)
   const SEATS_PER_TABLE = 8
   const TABLE_WIDTH = 200
@@ -115,10 +117,34 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
   const canvasWidth = Math.max(...tableLayouts.map(t => t.x + t.width)) + MARGIN
   const canvasHeight = Math.max(...tableLayouts.map(t => t.y + t.height)) + MARGIN
 
+  // 체크인 통계 계산
+  const totalParticipants = participants.length
+  const checkedInCount = Object.values(checkInStatus).filter(Boolean).length
+  const checkInRate = totalParticipants > 0 ? Math.round((checkedInCount / totalParticipants) * 100) : 0
+
   return (
     <div className="w-full">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">좌석 배치도</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">좌석 배치도</h2>
+          <div className="flex items-center gap-4 mt-2">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-emerald-500 rounded-full"></div>
+              <span className="text-sm text-gray-600">
+                입장 완료: <strong className="text-emerald-700">{checkedInCount}명</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-gray-400 rounded-full"></div>
+              <span className="text-sm text-gray-600">
+                미입장: <strong className="text-gray-700">{totalParticipants - checkedInCount}명</strong>
+              </span>
+            </div>
+            <div className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-sm font-medium">
+              진행률: {checkInRate}%
+            </div>
+          </div>
+        </div>
         <button
           onClick={onPrint}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -207,6 +233,12 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                 {table.seats.map((seat, seatIndex) => {
                   const member = group.members[seatIndex]
                   if (!member) return null
+                  
+                  const isCheckedIn = checkInStatus[member.id] || false
+                  const baseColor = member.gender === 'male' ? '#3B82F6' : '#EC4899'
+                  const strokeColor = member.gender === 'male' ? '#1D4ED8' : '#BE185D'
+                  const checkedInColor = '#059669' // 체크인된 경우 초록색
+                  const checkedInStroke = '#047857'
 
                   return (
                     <g key={seatIndex} transform={`translate(${seat.x}, ${seat.y})`}>
@@ -216,29 +248,45 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                         y={-SEAT_SIZE / 2}
                         width={SEAT_SIZE}
                         height={SEAT_SIZE}
-                        fill={member.gender === 'male' ? '#3B82F6' : '#EC4899'}
-                        stroke={member.gender === 'male' ? '#1D4ED8' : '#BE185D'}
-                        strokeWidth="2"
+                        fill={isCheckedIn ? checkedInColor : baseColor}
+                        stroke={isCheckedIn ? checkedInStroke : strokeColor}
+                        strokeWidth={isCheckedIn ? "3" : "2"}
                         rx="6"
                         filter="url(#shadow)"
                       />
                       
+                      {/* 체크인 표시 - 체크인된 경우 외곽 테두리 추가 */}
+                      {isCheckedIn && (
+                        <rect
+                          x={-SEAT_SIZE / 2 - 2}
+                          y={-SEAT_SIZE / 2 - 2}
+                          width={SEAT_SIZE + 4}
+                          height={SEAT_SIZE + 4}
+                          fill="none"
+                          stroke="#10B981"
+                          strokeWidth="2"
+                          strokeDasharray="4,2"
+                          rx="8"
+                          opacity="0.8"
+                        />
+                      )}
+                      
                       {/* 의자 등받이 */}
                       {seat.side === 'top' && (
                         <rect x={-SEAT_SIZE / 2 + 4} y={-SEAT_SIZE / 2 - 8} width={SEAT_SIZE - 8} height="6" 
-                              fill={member.gender === 'male' ? '#1D4ED8' : '#BE185D'} rx="3" />
+                              fill={isCheckedIn ? checkedInStroke : (member.gender === 'male' ? '#1D4ED8' : '#BE185D')} rx="3" />
                       )}
                       {seat.side === 'bottom' && (
                         <rect x={-SEAT_SIZE / 2 + 4} y={SEAT_SIZE / 2 + 2} width={SEAT_SIZE - 8} height="6" 
-                              fill={member.gender === 'male' ? '#1D4ED8' : '#BE185D'} rx="3" />
+                              fill={isCheckedIn ? checkedInStroke : (member.gender === 'male' ? '#1D4ED8' : '#BE185D')} rx="3" />
                       )}
                       {seat.side === 'left' && (
                         <rect x={-SEAT_SIZE / 2 - 8} y={-SEAT_SIZE / 2 + 4} width="6" height={SEAT_SIZE - 8} 
-                              fill={member.gender === 'male' ? '#1D4ED8' : '#BE185D'} rx="3" />
+                              fill={isCheckedIn ? checkedInStroke : (member.gender === 'male' ? '#1D4ED8' : '#BE185D')} rx="3" />
                       )}
                       {seat.side === 'right' && (
                         <rect x={SEAT_SIZE / 2 + 2} y={-SEAT_SIZE / 2 + 4} width="6" height={SEAT_SIZE - 8} 
-                              fill={member.gender === 'male' ? '#1D4ED8' : '#BE185D'} rx="3" />
+                              fill={isCheckedIn ? checkedInStroke : (member.gender === 'male' ? '#1D4ED8' : '#BE185D')} rx="3" />
                       )}
 
                       {/* 참가자 이름 */}
@@ -246,13 +294,13 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                         x={0}
                         y={5}
                         textAnchor="middle"
-                        className="text-xs font-medium fill-white"
-                        style={{ fontSize: '11px' }}
+                        className={`text-xs font-medium fill-white ${isCheckedIn ? 'font-bold' : ''}`}
+                        style={{ fontSize: isCheckedIn ? '12px' : '11px' }}
                       >
                         {member.name}
                       </text>
 
-                      {/* 성별 아이콘 */}
+                      {/* 성별 아이콘 또는 체크인 아이콘 */}
                       <text
                         x={0}
                         y={-8}
@@ -260,7 +308,7 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                         className="text-xs fill-white"
                         style={{ fontSize: '12px' }}
                       >
-                        {member.gender === 'male' ? '♂' : '♀'}
+                        {isCheckedIn ? '✓' : (member.gender === 'male' ? '♂' : '♀')}
                       </text>
                     </g>
                   )
@@ -270,15 +318,23 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
           })}
 
           {/* 범례 */}
-          <g transform={`translate(20, ${canvasHeight - 80})`}>
-            <rect x={0} y={0} width="200" height="60" fill="white" stroke="#ccc" strokeWidth="1" rx="4" filter="url(#shadow)" />
+          <g transform={`translate(20, ${canvasHeight - 100})`}>
+            <rect x={0} y={0} width="280" height="80" fill="white" stroke="#ccc" strokeWidth="1" rx="4" filter="url(#shadow)" />
             <text x={10} y={20} className="text-sm font-bold fill-gray-800" style={{ fontSize: '12px' }}>범례</text>
             
+            {/* 첫 번째 줄 */}
             <rect x={10} y={25} width="20" height="20" fill="#3B82F6" stroke="#1D4ED8" strokeWidth="1" rx="3" />
             <text x={35} y={38} className="text-xs fill-gray-700" style={{ fontSize: '10px' }}>남성</text>
             
             <rect x={80} y={25} width="20" height="20" fill="#EC4899" stroke="#BE185D" strokeWidth="1" rx="3" />
             <text x={105} y={38} className="text-xs fill-gray-700" style={{ fontSize: '10px' }}>여성</text>
+            
+            {/* 두 번째 줄 */}
+            <rect x={10} y={50} width="20" height="20" fill="#059669" stroke="#047857" strokeWidth="2" rx="3" />
+            <text x={35} y={63} className="text-xs fill-gray-700" style={{ fontSize: '10px' }}>입장완료</text>
+            
+            <rect x={100} y={50} width="20" height="20" fill="none" stroke="#10B981" strokeWidth="2" strokeDasharray="4,2" rx="3" />
+            <text x={125} y={63} className="text-xs fill-gray-700" style={{ fontSize: '10px' }}>체크인 표시</text>
           </g>
         </svg>
       </div>
@@ -379,21 +435,52 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                   <h3 className="text-xl font-bold text-blue-700">👨 남성 ({allMaleMembers.length}명)</h3>
                 </div>
                 <div className="space-y-2">
-                  {allMaleMembers.map((member, index) => (
-                    <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-blue-600 font-medium w-6 text-center">
-                          {index + 1}
-                        </span>
-                        <span className="text-lg font-semibold text-gray-800">
-                          {member.name}
-                        </span>
+                  {allMaleMembers.map((member, index) => {
+                    const isCheckedIn = checkInStatus[member.id] || false
+                    return (
+                      <div 
+                        key={member.id} 
+                        className={`flex items-center justify-between py-3 px-4 rounded-lg transition-all duration-200 ${
+                          isCheckedIn 
+                            ? 'bg-green-100 border-2 border-green-300 shadow-md' 
+                            : 'bg-blue-50 hover:bg-blue-100 border border-blue-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-blue-600 font-medium w-6 text-center">
+                            {index + 1}
+                          </span>
+                          <span className={`text-lg font-semibold ${
+                            isCheckedIn ? 'text-green-800' : 'text-gray-800'
+                          }`}>
+                            {isCheckedIn && <span className="mr-2">✅</span>}
+                            {member.name}
+                          </span>
+                          {isCheckedIn && (
+                            <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full font-medium">
+                              입장완료
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onToggleCheckIn(member.id)}
+                            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                              isCheckedIn
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                            title={isCheckedIn ? '입장 취소' : '입장 체크'}
+                          >
+                            {isCheckedIn ? '📤 취소' : '📥 체크'}
+                          </button>
+                          <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                            테이블 {member.tableId}
+                          </div>
+                        </div>
                       </div>
-                      <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                        테이블 {member.tableId}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -416,21 +503,52 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                   <h3 className="text-xl font-bold text-pink-700">👩 여성 ({allFemaleMembers.length}명)</h3>
                 </div>
                 <div className="space-y-2">
-                  {allFemaleMembers.map((member, index) => (
-                    <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-pink-50 rounded-lg hover:bg-pink-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-pink-600 font-medium w-6 text-center">
-                          {index + 1}
-                        </span>
-                        <span className="text-lg font-semibold text-gray-800">
-                          {member.name}
-                        </span>
+                  {allFemaleMembers.map((member, index) => {
+                    const isCheckedIn = checkInStatus[member.id] || false
+                    return (
+                      <div 
+                        key={member.id} 
+                        className={`flex items-center justify-between py-3 px-4 rounded-lg transition-all duration-200 ${
+                          isCheckedIn 
+                            ? 'bg-green-100 border-2 border-green-300 shadow-md' 
+                            : 'bg-pink-50 hover:bg-pink-100 border border-pink-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-pink-600 font-medium w-6 text-center">
+                            {index + 1}
+                          </span>
+                          <span className={`text-lg font-semibold ${
+                            isCheckedIn ? 'text-green-800' : 'text-gray-800'
+                          }`}>
+                            {isCheckedIn && <span className="mr-2">✅</span>}
+                            {member.name}
+                          </span>
+                          {isCheckedIn && (
+                            <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full font-medium">
+                              입장완료
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => onToggleCheckIn(member.id)}
+                            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                              isCheckedIn
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                            title={isCheckedIn ? '입장 취소' : '입장 체크'}
+                          >
+                            {isCheckedIn ? '📤 취소' : '📥 체크'}
+                          </button>
+                          <div className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                            테이블 {member.tableId}
+                          </div>
+                        </div>
                       </div>
-                      <div className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                        테이블 {member.tableId}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -445,9 +563,12 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
             </svg>
             <span className="font-medium">💡 사용법:</span>
           </div>
-          <p className="text-blue-600 text-sm mt-1 ml-7">
-            가나다순으로 정렬되어 있어 이름으로 쉽게 찾을 수 있습니다. 각 이름 옆의 배지에서 테이블 번호를 확인하세요!
-          </p>
+          <div className="text-blue-600 text-sm mt-2 ml-7 space-y-1">
+            <p>• 가나다순으로 정렬되어 있어 이름으로 쉽게 찾을 수 있습니다</p>
+            <p>• 각 이름 옆의 배지에서 테이블 번호를 확인하세요</p>
+            <p>• <strong>📥 체크</strong> 버튼을 클릭하여 참가자 입장을 체크할 수 있습니다</p>
+            <p>• 입장 완료된 참가자는 <strong className="text-green-700">초록색</strong>으로 표시되며, 좌석배치도에서도 구분됩니다</p>
+          </div>
         </div>
       </div>
     </div>

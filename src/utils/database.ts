@@ -19,6 +19,7 @@ export interface DBParticipant {
   meetings_by_round: Record<string, string[]>
   all_met_people: string[]
   group_history: number[]
+  is_checked_in: boolean
   created_at: string
   updated_at: string
 }
@@ -191,14 +192,38 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
         mbti: p.mbti,
         meetings_by_round: p.meetingsByRound,
         all_met_people: p.allMetPeople,
-        group_history: p.groupHistory
+        group_history: p.groupHistory,
+        is_checked_in: p.isCheckedIn || false
       }))
 
       const { error } = await supabase
         .from('participants')
         .insert(dbParticipants)
 
-      if (error) throw error
+      if (error) {
+        // is_checked_in 컬럼이 없는 경우 해당 필드를 제외하고 다시 시도
+        if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+          console.warn('⚠️ is_checked_in 컬럼이 없습니다. 컬럼 없이 저장을 시도합니다.')
+          const dbParticipantsWithoutCheckIn = participants.map(p => ({
+            id: p.id,
+            meeting_id: meetingId,
+            name: p.name,
+            gender: p.gender,
+            mbti: p.mbti,
+            meetings_by_round: p.meetingsByRound,
+            all_met_people: p.allMetPeople,
+            group_history: p.groupHistory
+          }))
+          
+          const { error: retryError } = await supabase
+            .from('participants')
+            .insert(dbParticipantsWithoutCheckIn)
+          
+          if (retryError) throw retryError
+        } else {
+          throw error
+        }
+      }
     }
 
     return true
@@ -230,11 +255,105 @@ export const getParticipants = async (): Promise<Participant[]> => {
       mbti: p.mbti,
       meetingsByRound: p.meetings_by_round || {},
       allMetPeople: p.all_met_people || [],
-      groupHistory: p.group_history || []
+      groupHistory: p.group_history || [],
+      isCheckedIn: p.is_checked_in !== undefined ? p.is_checked_in : false
     }))
   } catch (error) {
     console.error('참가자 조회 중 오류:', error)
     return []
+  }
+}
+
+// 참가자 체크인 상태 업데이트
+export const updateParticipantCheckIn = async (participantId: string, isCheckedIn: boolean): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) {
+    console.error('❌ 체크인 업데이트 실패: 활성 모임 ID가 없습니다')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) {
+    console.error('❌ 체크인 업데이트 실패: Supabase 클라이언트가 없습니다')
+    return false
+  }
+  
+  try {
+    console.log('📝 체크인 상태 업데이트 시도:', { participantId, isCheckedIn, meetingId })
+    
+    const { data, error } = await supabase
+      .from('participants')
+      .update({ is_checked_in: isCheckedIn })
+      .eq('meeting_id', meetingId)
+      .eq('id', participantId)
+      .select()
+
+    if (error) {
+      console.error('❌ Supabase 업데이트 에러:', error)
+      
+      // 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+        console.warn('⚠️ is_checked_in 컬럼이 없습니다. 로컬 상태로만 관리합니다.')
+        return true // 로컬에서만 작동하도록 성공으로 처리
+      }
+      
+      throw error
+    }
+    
+    console.log('✅ 체크인 상태 업데이트 성공:', data)
+    return true
+  } catch (error) {
+    console.error('❌ 참가자 체크인 상태 업데이트 중 오류:', error)
+    return false
+  }
+}
+
+// 모든 참가자 체크인 상태 초기화
+export const resetAllCheckInStatus = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    const { error } = await supabase
+      .from('participants')
+      .update({ is_checked_in: false })
+      .eq('meeting_id', meetingId)
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('체크인 상태 초기화 중 오류:', error)
+    return false
+  }
+}
+
+// 데이터베이스 테이블 구조 확인용 (디버깅)
+export const checkTableStructure = async (): Promise<void> => {
+  const supabase = createSupabaseClient()
+  if (!supabase) return
+  
+  try {
+    console.log('📋 participants 테이블 구조 확인 중...')
+    
+    // 첫 번째 참가자 데이터를 가져와서 구조 확인
+    const { data, error } = await supabase
+      .from('participants')
+      .select('*')
+      .limit(1)
+
+    if (error) {
+      console.error('❌ 테이블 구조 확인 중 오류:', error)
+    } else {
+      console.log('📋 participants 테이블 샘플 데이터:', data)
+      if (data && data.length > 0) {
+        console.log('📋 테이블 컬럼들:', Object.keys(data[0]))
+      }
+    }
+  } catch (error) {
+    console.error('❌ 테이블 구조 확인 중 예외:', error)
   }
 }
 

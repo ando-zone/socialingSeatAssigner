@@ -33,6 +33,7 @@ export default function ResultPage() {
   const [availableRounds, setAvailableRounds] = useState<number[]>([])
   const [selectedHistoryRound, setSelectedHistoryRound] = useState<number | null>(null)
   const [historyResult, setHistoryResult] = useState<GroupingResult | null>(null)
+  const [checkInStatus, setCheckInStatus] = useState<{[participantId: string]: boolean}>({})
 
   useEffect(() => {
     const loadData = async () => {
@@ -42,7 +43,8 @@ export default function ResultPage() {
           getParticipants, 
           getExitedParticipants,
           getCurrentMeetingId,
-          getAllRounds
+          getAllRounds,
+          checkTableStructure
         } = await import('@/utils/database')
         
         const meetingId = getCurrentMeetingId()
@@ -53,6 +55,9 @@ export default function ResultPage() {
         }
         
         console.log('📥 결과 페이지 데이터 로딩 중...')
+        
+        // 디버깅을 위해 테이블 구조 확인
+        await checkTableStructure()
         
         const [groupingResult, participants, exitedParticipants, rounds] = await Promise.all([
           getGroupingResult(),
@@ -71,6 +76,13 @@ export default function ResultPage() {
           setResult(groupingResult)
           setParticipants(migratedParticipants)
           setAvailableRounds(rounds)
+          
+          // 체크인 상태 초기화
+          const initialCheckInStatus: {[participantId: string]: boolean} = {}
+          migratedParticipants.forEach(participant => {
+            initialCheckInStatus[participant.id] = participant.isCheckedIn || false
+          })
+          setCheckInStatus(initialCheckInStatus)
           
           console.log('✅ 결과 페이지 데이터 로드 완료')
         } else {
@@ -101,6 +113,62 @@ export default function ResultPage() {
       }
     } catch (error) {
       console.error('히스토리 라운드 로드 중 오류:', error)
+    }
+  }
+
+  // 참가자 체크인 상태 토글
+  const toggleCheckIn = async (participantId: string) => {
+    try {
+      const currentStatus = checkInStatus[participantId] || false
+      const newStatus = !currentStatus
+      
+      // 즉시 UI 업데이트
+      setCheckInStatus(prev => ({
+        ...prev,
+        [participantId]: newStatus
+      }))
+      
+      // 데이터베이스 업데이트
+      const { updateParticipantCheckIn } = await import('@/utils/database')
+      const success = await updateParticipantCheckIn(participantId, newStatus)
+      
+      if (!success) {
+        // 실패 시 원래 상태로 되돌리기
+        setCheckInStatus(prev => ({
+          ...prev,
+          [participantId]: currentStatus
+        }))
+        console.error('체크인 상태 업데이트 실패')
+      } else {
+        const participantName = participants.find(p => p.id === participantId)?.name
+        console.log(`${participantName} 체크인 상태: ${newStatus ? '입장' : '미입장'}`)
+      }
+    } catch (error) {
+      console.error('체크인 토글 중 오류:', error)
+    }
+  }
+
+  // 모든 참가자 체크인 초기화
+  const resetAllCheckIn = async () => {
+    if (!confirm('모든 참가자의 입장 체크를 초기화하시겠습니까?')) return
+    
+    try {
+      const { resetAllCheckInStatus } = await import('@/utils/database')
+      const success = await resetAllCheckInStatus()
+      
+      if (success) {
+        // 모든 체크인 상태를 false로 설정
+        const resetStatus: {[participantId: string]: boolean} = {}
+        participants.forEach(participant => {
+          resetStatus[participant.id] = false
+        })
+        setCheckInStatus(resetStatus)
+        console.log('모든 참가자 체크인 상태 초기화 완료')
+      } else {
+        console.error('체크인 초기화 실패')
+      }
+    } catch (error) {
+      console.error('체크인 초기화 중 오류:', error)
     }
   }
 
@@ -809,8 +877,19 @@ export default function ResultPage() {
           <>
             {/* 요약 통계 */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">배치 요약</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">배치 요약</h2>
+            {participants.length > 0 && (
+              <button
+                onClick={resetAllCheckIn}
+                className="text-sm bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
+                title="모든 입장 체크 초기화"
+              >
+                🔄 체크인 초기화
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">{result.summary.totalGroups}</div>
               <div className="text-sm text-gray-600">총 그룹 수</div>
@@ -818,6 +897,15 @@ export default function ResultPage() {
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-2xl font-bold text-green-600">{result.summary.newMeetingsCount}</div>
               <div className="text-sm text-gray-600">새로운 만남</div>
+            </div>
+            <div className="text-center p-4 bg-emerald-50 rounded-lg">
+              <div className="text-2xl font-bold text-emerald-600">
+                {Object.values(checkInStatus).filter(Boolean).length}/{participants.length}
+              </div>
+              <div className="text-sm text-gray-600">입장 완료</div>
+              <div className="text-xs text-emerald-600 mt-1">
+                {participants.length > 0 ? Math.round((Object.values(checkInStatus).filter(Boolean).length / participants.length) * 100) : 0}%
+              </div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
               <div className={`text-2xl font-bold ${getBalanceColor(result.summary.genderBalanceScore)}`}>
@@ -848,7 +936,12 @@ export default function ResultPage() {
             </div>
             <div className="ml-3">
               <div className="text-sm text-blue-700">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="mb-1">
+                      <strong>📥 입장 체크:</strong> 참가자가 도착하면 📥 버튼을 클릭해서 입장을 체크할 수 있습니다. 입장한 참가자는 초록색으로 표시됩니다.
+                    </p>
+                  </div>
                   <div>
                     <p className="mb-1">
                       <strong>🔄 위치 변경:</strong> 
@@ -1012,17 +1105,19 @@ export default function ResultPage() {
                   const isDragging = draggedParticipant?.id === member.id
                   const isSelected = swapSelectedParticipant?.id === member.id
                   const isSwapTarget = swapSelectedParticipant && swapSelectedParticipant.id !== member.id && swapSelectedParticipant.groupId !== group.id
+                  const isCheckedIn = checkInStatus[member.id] || false
                   
                   return (
                     <div 
                       key={member.id} 
                       className={`
                         border border-gray-200 rounded transition-all duration-200
+                        ${isCheckedIn ? 'border-green-400 bg-green-50 shadow-md' : 'bg-white'}
                         ${editingParticipant === member.id ? 'border-purple-400 bg-purple-50' : ''}
                         ${isDragging ? 'opacity-50 scale-95 border-blue-400 bg-blue-50' : ''}
                         ${isSelected ? 'border-orange-500 bg-orange-100 shadow-lg ring-2 ring-orange-300' : ''}
                         ${isSwapTarget ? 'border-green-500 bg-green-100 hover:border-green-600 hover:bg-green-200 shadow-lg ring-2 ring-green-300' : ''}
-                        ${!isDragging && !isSelected && !isSwapTarget && editingParticipant !== member.id ? 'hover:border-blue-300 hover:bg-blue-50' : ''}
+                        ${!isDragging && !isSelected && !isSwapTarget && editingParticipant !== member.id && !isCheckedIn ? 'hover:border-blue-300 hover:bg-blue-50' : ''}
                         ${draggedParticipant && draggedParticipant.id !== member.id && draggedParticipant.fromGroupId !== group.id ? 'border-green-300 bg-green-50 hover:border-green-400 hover:bg-green-100 shadow-md' : ''}
                       `}
                     >
@@ -1100,7 +1195,17 @@ export default function ResultPage() {
                               !swapSelectedParticipant ? '드래그해서 다른 사람과 위치 바꾸기' : ''
                             }
                           >
-                            <span className="font-medium">{member.name}</span>
+                            <div className="flex items-center">
+                              <span className={`font-medium ${isCheckedIn ? 'text-green-700' : ''}`}>
+                                {isCheckedIn && <span className="mr-1">✅</span>}
+                                {member.name}
+                              </span>
+                              {isCheckedIn && (
+                                <span className="ml-2 text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">
+                                  입장완료
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-500">
                               {member.gender === 'male' ? '남성' : '여성'} · {' '}
                               {member.mbti === 'extrovert' ? '외향' : '내향'}
@@ -1129,6 +1234,20 @@ export default function ResultPage() {
                             
                             {!isSelected && !isSwapTarget && (
                               <div className="flex gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleCheckIn(member.id)
+                                  }}
+                                  className={`text-sm px-2 py-1 rounded transition-colors ${
+                                    isCheckedIn 
+                                      ? 'text-red-600 hover:text-red-800 hover:bg-red-100' 
+                                      : 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                                  }`}
+                                  title={isCheckedIn ? '입장 취소' : '입장 체크'}
+                                >
+                                  {isCheckedIn ? '📤' : '📥'}
+                                </button>
                                 <button
                                   onClick={() => startEditParticipant(member.id)}
                                   className="text-purple-500 hover:text-purple-700 text-xs px-1 py-1 rounded hover:bg-purple-100 transition-colors"
@@ -1232,6 +1351,8 @@ export default function ResultPage() {
           <SeatingChart 
             groups={result.groups} 
             participants={participants}
+            checkInStatus={checkInStatus}
+            onToggleCheckIn={toggleCheckIn}
             onPrint={() => window.print()}
           />
         )}

@@ -6,6 +6,7 @@ export interface Participant {
   meetingsByRound: { [round: number]: string[] } // 라운드별 만남 기록
   allMetPeople: string[] // 전체 만난 사람 목록 (중복 제거)
   groupHistory: number[] // 그룹 히스토리
+  isCheckedIn?: boolean // 입장 체크 상태 (선택적)
 }
 
 export interface Group {
