@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type GenderConstraint } from '@/utils/grouping'
-import { exportToJSON, importFromJSON, getSnapshots, restoreSnapshot } from '@/utils/backup'
+import { exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, deleteSnapshot, createSnapshot } from '@/utils/backup'
 
 // Components
 import ParticipantManager from '@/components/ParticipantManager'
@@ -151,47 +151,50 @@ export default function Home() {
           setNumGroups(groupSettings.numGroups || 6)
           setCustomGroupSizes(groupSettings.customGroupSizes || Array(groupSettings.numGroups || 6).fill(groupSettings.groupSize || 4))
           
-          // 성비 설정 복원
-          if (groupSettings.customGroupGenders) {
-            setCustomGroupGenders(groupSettings.customGroupGenders)
-          } else {
-            const localGenders = localStorage.getItem('seatAssigner_customGroupGenders')
-            if (localGenders) {
-              try {
-                setCustomGroupGenders(JSON.parse(localGenders))
-              } catch (e) {
-                const numGroups = groupSettings.numGroups || 6
-                const defaultMale = Math.ceil((groupSettings.groupSize || 4) * 0.6)
-                const defaultFemale = (groupSettings.groupSize || 4) - defaultMale
-                setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
-              }
-            } else {
-              const numGroups = groupSettings.numGroups || 6
-              const defaultMale = Math.ceil((groupSettings.groupSize || 4) * 0.6)
-              const defaultFemale = (groupSettings.groupSize || 4) - defaultMale
-              setCustomGroupGenders(Array(numGroups).fill({maleCount: defaultMale, femaleCount: defaultFemale}))
-            }
-          }
-          
+          // 성비 설정 복원 - 데이터베이스에서 온 설정을 우선 사용
+          setCustomGroupGenders(groupSettings.customGroupGenders)
           setEnableGenderRatio(groupSettings.enableGenderRatio || false)
         } else {
-          // localStorage에서 설정 복원 시도
+          // localStorage에서 설정 복원 시도 (DB에 설정이 없는 경우만)
           const localGroupSizes = localStorage.getItem('seatAssigner_customGroupSizes')
           const localNumGroups = localStorage.getItem('seatAssigner_numGroups')
           const localGroupSize = localStorage.getItem('seatAssigner_groupSize')
+          const localGroupGenders = localStorage.getItem('seatAssigner_customGroupGenders')
+          
+          const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
+          const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
           
           if (localGroupSizes) {
             try {
               setCustomGroupSizes(JSON.parse(localGroupSizes))
             } catch (e) {
-              const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
-              const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
               setCustomGroupSizes(Array(numGroups).fill(groupSize))
             }
           } else {
-            const numGroups = localNumGroups ? parseInt(localNumGroups) : 6
-            const groupSize = localGroupSize ? parseInt(localGroupSize) : 4
             setCustomGroupSizes(Array(numGroups).fill(groupSize))
+          }
+          
+          // localStorage에서 성비 설정도 복원
+          if (localGroupGenders) {
+            try {
+              setCustomGroupGenders(JSON.parse(localGroupGenders))
+            } catch (e) {
+              // localStorage 파싱 실패 시 기본값 생성
+              const defaultGenders = Array(numGroups).fill(null).map(() => {
+                const maleCount = Math.ceil(groupSize * 0.6)
+                const femaleCount = groupSize - maleCount
+                return { maleCount, femaleCount }
+              })
+              setCustomGroupGenders(defaultGenders)
+            }
+          } else {
+            // localStorage에 성비 설정이 없는 경우 기본값 생성
+            const defaultGenders = Array(numGroups).fill(null).map(() => {
+              const maleCount = Math.ceil(groupSize * 0.6)
+              const femaleCount = groupSize - maleCount
+              return { maleCount, femaleCount }
+            })
+            setCustomGroupGenders(defaultGenders)
           }
         }
         
@@ -203,8 +206,37 @@ export default function Home() {
       }
     }
 
-    checkUrlMeetingId().then(loadData)
+    const loadDataAndSnapshots = async () => {
+      await loadData()
+      // 초기 스냅샷 목록 로드
+      try {
+        const allSnapshots = await getSnapshots()
+        setSnapshots(allSnapshots)
+      } catch (error) {
+        console.error('초기 스냅샷 로딩 실패:', error)
+      }
+    }
+
+    checkUrlMeetingId().then(loadDataAndSnapshots)
   }, [isClient, isInitialLoad, setParticipants, setGroupingMode, setGroupSize, setNumGroups, setCustomGroupSizes, setCustomGroupGenders, setEnableGenderRatio, setGroupSettingsLoaded])
+
+  // 페이지 방문 시마다 스냅샷 목록 새로고침 (초기 로드가 완료된 후)
+  useEffect(() => {
+    if (!isClient || isInitialLoad) return
+    
+    const loadSnapshots = async () => {
+      try {
+        console.log('🔄 스냅샷 목록 새로고침 중...')
+        const allSnapshots = await getSnapshots()
+        setSnapshots(allSnapshots)
+        console.log('✅ 스냅샷 목록 새로고침 완료:', allSnapshots.length, '개')
+      } catch (error) {
+        console.error('❌ 스냅샷 목록 새로고침 실패:', error)
+      }
+    }
+    
+    loadSnapshots()
+  }, [isClient, isInitialLoad])
 
   // Save settings when they change
   useEffect(() => {
@@ -262,6 +294,9 @@ export default function Home() {
           saveGroupingResult(result)
         ])
         console.log('✅ 그룹핑 결과 저장 완료')
+        
+        // 그룹 배치 후 스냅샷 생성
+        await createSnapshot('grouping', `${currentRound}라운드 그룹 배치 완료 (${result.groups.length}개 그룹)`)
       }
       
       setParticipants(updatedParticipants)
@@ -323,6 +358,9 @@ export default function Home() {
         saveParticipants(updatedParticipants),
         saveGroupingResult(result)
       ])
+
+      // 재그룹핑 후 스냅샷 생성
+      await createSnapshot('regroup', `${reGroupRound}라운드 재그룹핑 완료 (${result.groups.length}개 그룹)`)
 
       setParticipants(updatedParticipants)
       router.push('/result')
@@ -405,6 +443,23 @@ export default function Home() {
     } catch (error) {
       console.error('스냅샷 복원 실패:', error)
       alert('스냅샷 복원에 실패했습니다.')
+    }
+  }
+
+  // Delete snapshot
+  const handleDeleteSnapshot = async (snapshotId: number) => {
+    try {
+      const success = await deleteSnapshot(snapshotId)
+      if (success) {
+        alert('스냅샷이 삭제되었습니다!')
+        // 스냅샷 목록 새로고침
+        await refreshSnapshots()
+      } else {
+        alert('스냅샷 삭제에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('스냅샷 삭제 실패:', error)
+      alert('스냅샷 삭제에 실패했습니다.')
     }
   }
 
@@ -524,6 +579,7 @@ export default function Home() {
             onExportData={handleExportData}
             onImportData={handleImportData}
             onRestoreSnapshot={handleRestoreSnapshot}
+            onDeleteSnapshot={handleDeleteSnapshot}
             onRefreshSnapshots={refreshSnapshots}
             onNewMeeting={handleNewMeeting}
           />

@@ -66,7 +66,7 @@ export function useParticipantActions({
     try {
       const { saveParticipants } = await import('@/utils/database')
       await saveParticipants(updatedParticipants)
-      await createSnapshot(`참가자 수정: ${editForm.name}`, updatedParticipants.length)
+      await createSnapshot('participant_edit', `참가자 수정: ${editForm.name}`)
       
       setParticipants(updatedParticipants)
       setEditingParticipant(null)
@@ -119,7 +119,7 @@ export function useParticipantActions({
         saveExitedParticipants({ ...exitedParticipants, ...newExitedParticipant })
       ])
 
-      await createSnapshot(`참가자 삭제: ${participantToDelete.name}`, updatedParticipants.length)
+      await createSnapshot('participant_delete', `참가자 삭제: ${participantToDelete.name}`)
       
       setParticipants(updatedParticipants)
       
@@ -172,7 +172,7 @@ export function useParticipantActions({
         saveGroupingResult(updatedResult)
       ])
 
-      await createSnapshot(`그룹 ${groupId}에 참가자 추가: ${newParticipantData.name}`, updatedParticipants.length)
+      await createSnapshot('participant_add_to_group', `그룹 ${groupId}에 참가자 추가: ${newParticipantData.name}`)
       
       setParticipants(updatedParticipants)
       setResult(updatedResult)

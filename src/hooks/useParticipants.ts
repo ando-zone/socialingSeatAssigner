@@ -27,7 +27,7 @@ export function useParticipants() {
     await saveParticipants(updatedParticipants)
     
     // 스냅샷 생성
-    await createSnapshot(`참가자 추가: ${participantData.name}`, updatedParticipants.length)
+    await createSnapshot('participant_add', `참가자 추가: ${participantData.name}`)
     
     setParticipants(updatedParticipants)
   }, [participants])
@@ -50,7 +50,7 @@ export function useParticipants() {
       
       await saveExitedParticipants({ ...exitedParticipants, ...newExitedParticipant })
       await saveParticipants(updatedParticipants)
-      await createSnapshot(`참가자 삭제: ${participantToRemove.name}`, updatedParticipants.length)
+      await createSnapshot('participant_remove', `참가자 삭제: ${participantToRemove.name}`)
     }
     
     setParticipants(updatedParticipants)
@@ -114,7 +114,7 @@ export function useParticipants() {
       // Supabase에 저장
       const { saveParticipants } = await import('@/utils/database')
       await saveParticipants(updatedParticipants)
-      await createSnapshot(`일괄 추가: ${newParticipants.length}명`, updatedParticipants.length)
+      await createSnapshot('bulk_add', `일괄 추가: ${newParticipants.length}명`)
       
       setParticipants(updatedParticipants)
     }

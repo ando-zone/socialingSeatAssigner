@@ -28,10 +28,26 @@ export function useGroupingSettings() {
     
     // 그룹 수가 증가한 경우 새 그룹 추가
     while (newSizes.length < newNumGroups) {
-      const lastSize = newSizes.length > 0 ? newSizes[newSizes.length - 1] : 4
-      const lastGender = newGenders.length > 0 ? newGenders[newGenders.length - 1] : {maleCount: 2, femaleCount: 2}
+      const lastSize = newSizes.length > 0 ? newSizes[newSizes.length - 1] : groupSize
+      // 마지막 그룹의 성비를 기반으로 비율 계산
+      const lastGender = newGenders.length > 0 ? newGenders[newGenders.length - 1] : null
+      let newGender
+      
+      if (lastGender && lastGender.maleCount + lastGender.femaleCount > 0) {
+        // 기존 그룹의 성비 비율을 유지
+        const maleRatio = lastGender.maleCount / (lastGender.maleCount + lastGender.femaleCount)
+        const newMaleCount = Math.round(lastSize * maleRatio)
+        const newFemaleCount = lastSize - newMaleCount
+        newGender = { maleCount: newMaleCount, femaleCount: newFemaleCount }
+      } else {
+        // 기본 비율 (6:4 = 남성:여성)
+        const newMaleCount = Math.ceil(lastSize * 0.6)
+        const newFemaleCount = lastSize - newMaleCount
+        newGender = { maleCount: newMaleCount, femaleCount: newFemaleCount }
+      }
+      
       newSizes.push(lastSize)
-      newGenders.push({ ...lastGender })
+      newGenders.push(newGender)
     }
     
     // 그룹 수가 감소한 경우 초과 그룹 제거
@@ -42,7 +58,7 @@ export function useGroupingSettings() {
     
     setCustomGroupSizes(newSizes)
     setCustomGroupGenders(newGenders)
-  }, [customGroupSizes, customGroupGenders])
+  }, [customGroupSizes, customGroupGenders, groupSize])
 
   const handleGroupSizeChange = useCallback((groupIndex: number, newSize: number) => {
     const newSizes = [...customGroupSizes]

@@ -359,6 +359,34 @@ export const checkTableStructure = async (): Promise<void> => {
 
 // ===== 그룹 배치 결과(GroupingResult) 관련 함수들 =====
 
+export const clearGroupingResult = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 그룹핑 결과 삭제 중...')
+    
+    const { error } = await supabase
+      .from('grouping_results')
+      .delete()
+      .eq('meeting_id', meetingId)
+
+    if (error) {
+      console.error('❌ 그룹핑 결과 삭제 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 그룹핑 결과 삭제 완료')
+    return true
+  } catch (error) {
+    console.error('❌ 그룹핑 결과 삭제 중 오류:', error)
+    return false
+  }
+}
+
 export const saveGroupingResult = async (result: GroupingResult): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()
   if (!meetingId) return false
@@ -629,15 +657,24 @@ export const getGroupSettings = async (): Promise<{
     }
 
     const settings = data[0]
+    
+    // customGroupGenders가 없는 경우 customGroupSizes 기반으로 기본값 생성
+    let customGroupGenders = settings.custom_group_genders
+    if (!customGroupGenders || customGroupGenders.length === 0) {
+      const groupSizes = settings.custom_group_sizes || []
+      customGroupGenders = groupSizes.map((size: number) => {
+        const maleCount = Math.ceil(size * 0.6) // 60% 남성
+        const femaleCount = size - maleCount
+        return { maleCount, femaleCount }
+      })
+    }
+    
     return {
       groupingMode: settings.grouping_mode,
       groupSize: settings.group_size,
       numGroups: settings.num_groups,
       customGroupSizes: settings.custom_group_sizes,
-      customGroupGenders: settings.custom_group_genders || [
-        {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
-        {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-      ],
+      customGroupGenders,
       enableGenderRatio: settings.enable_gender_ratio || false
     }
   } catch (error) {
@@ -736,6 +773,35 @@ export const restoreFromSnapshot = async (snapshotId: number): Promise<any | nul
   } catch (error) {
     console.error('스냅샷 복원 중 오류:', error)
     return null
+  }
+}
+
+export const deleteSnapshot = async (snapshotId: number): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 스냅샷 삭제 시작:', snapshotId)
+    
+    const { error } = await supabase
+      .from('snapshots')
+      .delete()
+      .eq('meeting_id', meetingId)
+      .eq('snapshot_id', snapshotId)
+
+    if (error) {
+      console.error('❌ 스냅샷 삭제 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 스냅샷 삭제 성공:', snapshotId)
+    return true
+  } catch (error) {
+    console.error('❌ 스냅샷 삭제 중 오류:', error)
+    return false
   }
 }
 

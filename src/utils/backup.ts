@@ -193,9 +193,15 @@ export async function restoreSnapshot(snapshotId: number): Promise<boolean> {
       promises.push(saveParticipants(snapshotData.participants))
     }
     
-    // 그룹 배치 결과 저장
+    // 그룹 배치 결과 저장 또는 삭제
     if (snapshotData.groupingResult) {
+      // 그룹핑 결과가 있으면 저장
       promises.push(saveGroupingResult(snapshotData.groupingResult))
+    } else {
+      // 그룹핑 결과가 null이면 기존 결과 삭제 (1라운드 시작 전 상태로 복원)
+      console.log('🗑️ 스냅샷에 그룹핑 결과가 없음 - 기존 그룹핑 결과 삭제')
+      const { clearGroupingResult } = await import('./database')
+      promises.push(clearGroupingResult())
     }
     
     // 이탈 참가자 저장
@@ -271,9 +277,15 @@ export async function importFromJSON(jsonString: string): Promise<{ success: boo
     // 참가자 저장
     promises.push(saveParticipants(data.participants))
     
-    // 그룹 배치 결과 저장
+    // 그룹 배치 결과 저장 또는 삭제
     if (data.groupingResult) {
+      // 그룹핑 결과가 있으면 저장
       promises.push(saveGroupingResult(data.groupingResult))
+    } else {
+      // 그룹핑 결과가 null이면 기존 결과 삭제
+      console.log('🗑️ JSON에 그룹핑 결과가 없음 - 기존 그룹핑 결과 삭제')
+      const { clearGroupingResult } = await import('./database')
+      promises.push(clearGroupingResult())
     }
     
     // 이탈 참가자 저장
@@ -332,7 +344,30 @@ export function formatDateTime(timestamp: string): string {
   }
 }
 
-// 스냅샷 삭제 (사용하지 않음 - DB에서 자동 관리)
+// 개별 스냅샷 삭제
+export async function deleteSnapshot(snapshotId: number): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  
+  try {
+    console.log(`🗑️ 스냅샷 삭제 시작: ID ${snapshotId}`)
+    
+    const { deleteSnapshot: deleteSnapshotDB } = await import('./database')
+    const success = await deleteSnapshotDB(snapshotId)
+    
+    if (success) {
+      console.log(`✅ 스냅샷 삭제 완료: ID ${snapshotId}`)
+      return true
+    } else {
+      console.error(`❌ 스냅샷 삭제 실패: ID ${snapshotId}`)
+      return false
+    }
+  } catch (error) {
+    console.error(`❌ 스냅샷 삭제 중 오류: ID ${snapshotId}`, error)
+    return false
+  }
+}
+
+// 스냅샷 정리 (사용하지 않음 - DB에서 자동 관리)
 export async function deleteOldSnapshots(keepCount: number = 20): Promise<void> {
   console.log('🗑️ 스냅샷 정리는 Supabase에서 자동으로 관리됩니다.')
 }

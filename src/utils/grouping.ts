@@ -218,6 +218,27 @@ export interface GenderConstraint {
   femaleCount: number
 }
 
+// 성비 제약조건 체크 함수
+function checkGenderConstraints(groups: Participant[][], genderConstraints: GenderConstraint[]): boolean {
+  if (!genderConstraints || genderConstraints.length !== groups.length) {
+    return true // 제약조건이 없으면 통과
+  }
+  
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i]
+    const constraint = genderConstraints[i]
+    const maleCount = group.filter(p => p.gender === 'male').length
+    const femaleCount = group.filter(p => p.gender === 'female').length
+    
+    if (maleCount !== constraint.maleCount || femaleCount !== constraint.femaleCount) {
+      console.warn(`⚠️ 그룹 ${i + 1} 성비 불일치: 실제 남${maleCount}/여${femaleCount}, 기대 남${constraint.maleCount}/여${constraint.femaleCount}`)
+      return false
+    }
+  }
+  
+  return true
+}
+
 // 최적화된 그룹 배치 알고리즘
 export function createOptimalGroups(
   participants: Participant[], 
@@ -259,12 +280,20 @@ export function createOptimalGroups(
     console.log('🎯 성비 제약 조건을 적용한 그룹 배치 시작')
     const result = assignParticipantsWithGenderConstraints(participants, groups, genderConstraints, currentRound)
     if (!result.success) {
-      console.warn('⚠️ 성비 제약 조건 배치 실패, 기본 배치로 전환:', result.reason)
-      // 기본 배치로 폴백
-      assignParticipantsBasic(participants, groups, currentRound)
+      console.error('❌ 성비 제약 조건 배치 실패:', result.reason)
+      throw new Error(`성비 제약 조건을 만족할 수 없습니다: ${result.reason}`)
+    } else {
+      console.log('✅ 성비 제약 조건 배치 성공')
+      // 성비 제약조건이 정확히 적용되었는지 재확인
+      const finalCheck = checkGenderConstraints(groups, genderConstraints)
+      if (!finalCheck) {
+        console.error('❌ 성비 제약조건 검증 실패')
+        throw new Error('성비 제약조건이 올바르게 적용되지 않았습니다.')
+      }
     }
   } else {
     // 기본 배치 로직
+    console.log('기본 배치 로직 사용 (성비 제약조건 없음)')
     assignParticipantsBasic(participants, groups, currentRound)
   }
 
@@ -284,13 +313,39 @@ export function createOptimalGroups(
   })
   console.log(`그룹 번호 회피 성공률: ${totalParticipants > 0 ? Math.round((totalAvoidanceSuccess / totalParticipants) * 100) : 0}% (${totalAvoidanceSuccess}/${totalParticipants})`)
 
-  // 새로운 만남 최적화 (특히 새로운 이성과의 만남 우선)
-  optimizeNewMeetings(groups, participants, currentRound)
+  // 새로운 만남 최적화 (특히 새로운 이성과의 만남 우선) - 성비 제약조건 고려
+  if (genderConstraints && genderConstraints.length === numGroups) {
+    console.log('🔒 성비 제약조건 활성화: 성비 유지를 최우선으로 최적화 시작')
+  }
+  optimizeNewMeetings(groups, participants, currentRound, genderConstraints)
   
-  // 그룹 균형 최적화
-  optimizeGroupBalance(groups, groupSizes)
+  // 그룹 균형 최적화 - 성비 제약조건이 없는 경우만 실행
+  if (!genderConstraints || genderConstraints.length !== numGroups) {
+    console.log('일반 그룹 균형 최적화 실행')
+    optimizeGroupBalance(groups, groupSizes)
+  } else {
+    console.log('⚠️ 성비 제약조건으로 인해 일반 균형 최적화 생략')
+  }
 
   console.log('최적화 완료:', groups.map(g => g.length))
+  
+  // 성비 제약조건이 있는 경우 최적화 후에도 유지되는지 최종 확인
+  if (genderConstraints && genderConstraints.length === numGroups) {
+    const finalConstraintCheck = checkGenderConstraints(groups, genderConstraints)
+    if (!finalConstraintCheck) {
+      console.error('🚨 심각한 오류: 최적화 과정에서 성비 제약조건이 깨짐!')
+      // 각 그룹별 성비 상세 로그
+      groups.forEach((group, index) => {
+        const maleCount = group.filter(p => p.gender === 'male').length
+        const femaleCount = group.filter(p => p.gender === 'female').length
+        const expected = genderConstraints[index]
+        console.error(`그룹 ${index + 1}: 실제 남${maleCount}/여${femaleCount}, 기대 남${expected.maleCount}/여${expected.femaleCount}`)
+      })
+      throw new Error('최적화 과정에서 성비 제약조건이 위반되었습니다.')
+    } else {
+      console.log('✅ 최적화 후에도 성비 제약조건 유지됨')
+    }
+  }
 
   // 결과 구성
   const finalGroups: Group[] = groups.map((groupMembers, index) => {
@@ -386,8 +441,13 @@ export function createOptimalGroups(
 }
 
 // 그룹 균형 최적화 함수
-function optimizeNewMeetings(groups: Participant[][], participants: Participant[], currentRound: number) {
+function optimizeNewMeetings(groups: Participant[][], participants: Participant[], currentRound: number, genderConstraints?: GenderConstraint[]) {
   const maxIterations = 100
+  const hasGenderConstraints = genderConstraints && genderConstraints.length === groups.length
+  
+  if (hasGenderConstraints) {
+    console.log('🔒 성비 제약조건을 엄격하게 준수하며 새로운 만남 최적화 진행')
+  }
   
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     let improved = false
@@ -414,17 +474,28 @@ function optimizeNewMeetings(groups: Participant[][], participants: Participant[
             group1[p1] = person2
             group2[p2] = person1
             
-            // 교환 후 새로운 만남 점수 계산
-            const newScore = calculateNewMeetingScore(group1, currentRound) + 
-                           calculateNewMeetingScore(group2, currentRound)
+            // 성비 제약조건 체크 (성비가 최우선순위!)
+            const genderConstraintValid = checkGenderConstraints(groups, genderConstraints)
             
-            if (newScore > oldScore) {
-              improved = true
-              break
+            if (genderConstraintValid) {
+              // 성비가 유지되는 경우에만 새로운 만남 점수 계산
+              const newScore = calculateNewMeetingScore(group1, currentRound) + 
+                             calculateNewMeetingScore(group2, currentRound)
+              
+              if (newScore > oldScore) {
+                improved = true
+                console.log(`🎯 성비 유지하며 최적화: 그룹${i+1}-그룹${j+1} 교환으로 점수 ${oldScore} -> ${newScore}`)
+                break
+              } else {
+                // 점수가 나빠지면 되돌리기
+                group1[p1] = person1
+                group2[p2] = person2
+              }
             } else {
-              // 되돌리기
+              // 성비 제약조건 위반 시 즉시 되돌리기
               group1[p1] = person1
               group2[p2] = person2
+              console.log(`❌ 성비 제약조건 위반으로 교환 취소: 그룹${i+1}-그룹${j+1}`)
             }
           }
           if (improved) break
@@ -435,6 +506,10 @@ function optimizeNewMeetings(groups: Participant[][], participants: Participant[
     }
     
     if (!improved) break
+  }
+  
+  if (hasGenderConstraints) {
+    console.log('✅ 성비 제약조건을 준수하며 새로운 만남 최적화 완료')
   }
 }
 

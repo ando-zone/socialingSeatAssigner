@@ -7,6 +7,7 @@ interface BackupManagerProps {
   onExportData: () => Promise<void>
   onImportData: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void>
   onRestoreSnapshot: (snapshotId: number) => Promise<void>
+  onDeleteSnapshot: (snapshotId: number) => Promise<void>
   onRefreshSnapshots: () => Promise<void>
   onNewMeeting: () => Promise<void>
 }
@@ -16,6 +17,7 @@ export default function BackupManager({
   onExportData,
   onImportData,
   onRestoreSnapshot,
+  onDeleteSnapshot,
   onRefreshSnapshots,
   onNewMeeting
 }: BackupManagerProps) {
@@ -100,13 +102,13 @@ export default function BackupManager({
               {snapshots.length > 0 ? (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {snapshots.map((snapshot) => (
-                    <div key={snapshot.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={snapshot.snapshot_id || snapshot.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <div className="font-medium text-sm">
                           {snapshot.description || '스냅샷'}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {formatDateTime(snapshot.created_at)}
+                          {formatDateTime(snapshot.timestamp)}
                         </div>
                         {snapshot.participant_count && (
                           <div className="text-xs text-blue-600">
@@ -114,12 +116,25 @@ export default function BackupManager({
                           </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => onRestoreSnapshot(snapshot.id)}
-                        className="text-sm bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded transition-colors"
-                      >
-                        복원
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => onRestoreSnapshot(snapshot.snapshot_id || snapshot.id)}
+                          className="text-sm bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded transition-colors"
+                        >
+                          복원
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('이 스냅샷을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                              onDeleteSnapshot(snapshot.snapshot_id || snapshot.id)
+                            }
+                          }}
+                          className="text-sm bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded transition-colors"
+                          title="스냅샷 삭제"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
