@@ -252,14 +252,6 @@ export default function ResultPage() {
               ))}
             </div>
 
-            {/* 좌석 배치도 */}
-            <SeatingChart 
-              groups={displayResult.groups} 
-              participants={participants}
-              checkInStatus={checkInStatus}
-              onToggleCheckIn={toggleCheckIn}
-              onPrint={() => window.print()}
-            />
           </>
         )}
 
