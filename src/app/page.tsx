@@ -10,6 +10,7 @@ import ParticipantManager from '@/components/ParticipantManager'
 import GroupingSettings from '@/components/GroupingSettings'
 import GroupingActions from '@/components/GroupingActions'
 import BackupManager from '@/components/BackupManager'
+import GroupingStageIndicator from '@/components/GroupingStageIndicator'
 
 // Hooks
 import { useParticipants } from '@/hooks/useParticipants'
@@ -532,6 +533,13 @@ export default function Home() {
         </div>
 
         <div className="space-y-8">
+          {/* 현재 진행 단계 표시 */}
+          <GroupingStageIndicator
+            hasGroupingResult={hasExistingResult}
+            currentRound={currentRound}
+            participantCount={participants.length}
+          />
+
           {/* 참가자 관리 */}
           <ParticipantManager
             participants={participants}
