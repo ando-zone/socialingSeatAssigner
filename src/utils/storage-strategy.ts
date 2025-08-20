@@ -186,7 +186,7 @@ class DatabaseStrategy implements StorageStrategy {
     const { deleteMeeting, getCurrentMeeting } = await import('./database')
     const meeting = await getCurrentMeeting()
     if (meeting?.user_id) {
-      await deleteMeeting(this.meetingId, meeting.user_id)
+      await deleteMeeting(this.meetingId)
       console.log(`✅ 모임 ${this.meetingId}의 모든 DB 데이터 삭제 완료`)
     }
   }

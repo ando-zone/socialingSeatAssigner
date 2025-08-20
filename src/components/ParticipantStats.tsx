@@ -63,7 +63,10 @@ export default function ParticipantStats({
         mbti: participant.mbti,
         totalMeetings: allMetIds.length,
         newMeetingsThisRound,
-        groupHistory: participant.groupHistory || [],
+        groupHistory: (participant.groupHistory || []).map((groupNumber, index) => ({
+          round: index + 1,
+          groupNumber
+        })),
         isCheckedIn: checkInStatus[participant.id] || false,
         meetingDiversity
       }

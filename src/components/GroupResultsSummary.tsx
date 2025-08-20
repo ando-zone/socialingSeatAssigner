@@ -51,8 +51,8 @@ export default function GroupResultsSummary({
           </div>
         </div>
         <div className="text-center p-4 bg-yellow-50 rounded-lg">
-          <div className="text-2xl font-bold text-yellow-600">{result.summary.repeatMeetingsCount}</div>
-          <div className="text-sm text-gray-600">재회</div>
+          <div className="text-2xl font-bold text-yellow-600">{result.summary.newMeetingsCount}</div>
+          <div className="text-sm text-gray-600">새로운 만남</div>
         </div>
         <div className="text-center p-4 bg-purple-50 rounded-lg">
           <div className="text-2xl font-bold text-purple-600">{result.round}</div>

@@ -36,10 +36,10 @@ interface GroupCardProps {
   onDrop: (participantId: string, groupId: number) => void
   onSaveEditParticipant: () => void
   onCancelEditParticipant: () => void
-  onEditFormChange: (field: keyof typeof editForm, value: string) => void
+  onEditFormChange: (field: 'name' | 'gender' | 'mbti', value: string) => void
   onAddParticipantToGroup: (groupId: number) => void
   onCancelAddForm: () => void
-  onNewParticipantChange: (field: keyof typeof newParticipant, value: string) => void
+  onNewParticipantChange: (field: 'name' | 'gender' | 'mbti', value: string) => void
   onSetShowAddForm: (groupId: number) => void
   // Helper functions
   getCurrentRoundMeetings: (participantId: string) => string[]

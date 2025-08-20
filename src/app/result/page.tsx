@@ -31,16 +31,23 @@ export default function ResultPage() {
     swapSelectedParticipant,
     draggedParticipant,
     swapMessage,
+    setResult,
+    setParticipants,
     setActiveTab,
+    setEditingParticipant,
     setEditForm,
+    setShowAddForm,
     setNewParticipant,
+    setSelectedParticipant,
+    setSwapSelectedParticipant,
+    setDraggedParticipant,
+    setSwapMessage,
     selectHistoryRound,
     selectGroupsRound,
     returnToCurrentRound,
     toggleCheckIn,
     resetAllCheckIn,
-    router,
-    ...restState
+    router
   } = useResultPage()
 
   const {
@@ -57,12 +64,22 @@ export default function ResultPage() {
   } = useParticipantActions({
     result,
     participants,
+    setResult,
+    setParticipants,
+    setSwapMessage,
+    editingParticipant,
+    setEditingParticipant,
+    setEditForm,
+    setShowAddForm,
+    setNewParticipant,
+    setSelectedParticipant,
+    setSwapSelectedParticipant,
+    setDraggedParticipant,
     editForm,
     newParticipant,
     selectedParticipant,
     swapSelectedParticipant,
-    draggedParticipant,
-    ...restState
+    draggedParticipant
   })
 
   // 현재 표시할 결과 결정
@@ -214,7 +231,7 @@ export default function ResultPage() {
               checkInStatus={checkInStatus}
               participantCount={participants.length}
               onResetAllCheckIn={resetAllCheckIn}
-              isViewingPastRound={isViewingPastRound}
+              isViewingPastRound={!!isViewingPastRound}
             />
 
             {/* 그룹 카드들 */}
@@ -224,7 +241,7 @@ export default function ResultPage() {
                   key={group.id}
                   group={group}
                   checkInStatus={checkInStatus}
-                  isViewingPastRound={isViewingPastRound}
+                  isViewingPastRound={!!isViewingPastRound}
                   isMobile={isMobile}
                   selectedParticipant={selectedParticipant}
                   swapSelectedParticipant={swapSelectedParticipant}
@@ -245,7 +262,7 @@ export default function ResultPage() {
                   onAddParticipantToGroup={addParticipantToGroup}
                   onCancelAddForm={cancelAddForm}
                   onNewParticipantChange={(field, value) => setNewParticipant(prev => ({ ...prev, [field]: value }))}
-                  onSetShowAddForm={restState.setShowAddForm}
+                  onSetShowAddForm={setShowAddForm}
                   getCurrentRoundMeetings={getCurrentRoundMeetings}
                   getPreviousRoundsMeetings={getPreviousRoundsMeetings}
                 />
@@ -350,7 +367,7 @@ export default function ResultPage() {
                           <span className="text-purple-600 font-medium">새로운 만남:</span> {historyResult.summary.newMeetingsCount}쌍
                         </div>
                         <div>
-                          <span className="text-purple-600 font-medium">재회:</span> {historyResult.summary.repeatMeetingsCount}쌍
+                          <span className="text-purple-600 font-medium">총 만남:</span> {historyResult.summary.newMeetingsCount}쌍
                         </div>
                         <div>
                           <span className="text-purple-600 font-medium">성별 균형:</span> {historyResult.summary.genderBalanceScore}%

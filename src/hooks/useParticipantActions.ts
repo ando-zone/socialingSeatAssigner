@@ -8,6 +8,7 @@ interface UseParticipantActionsProps {
   setResult: (result: GroupingResult | null) => void
   setParticipants: (participants: Participant[]) => void
   setSwapMessage: (message: string | null) => void
+  editingParticipant: string | null
   setEditingParticipant: (id: string | null) => void
   setEditForm: (form: { name: string; gender: 'male' | 'female'; mbti: 'extrovert' | 'introvert' }) => void
   setShowAddForm: (groupId: number | null) => void
@@ -28,6 +29,7 @@ export function useParticipantActions({
   setResult,
   setParticipants,
   setSwapMessage,
+  editingParticipant,
   setEditingParticipant,
   setEditForm,
   setShowAddForm,
@@ -60,7 +62,7 @@ export function useParticipantActions({
     if (!editForm.name.trim()) return
 
     const updatedParticipants = participants.map(p => 
-      p.id === setEditingParticipant ? { ...p, ...editForm } : p
+      p.id === editingParticipant ? { ...p, ...editForm } : p
     )
 
     try {
@@ -73,7 +75,7 @@ export function useParticipantActions({
     } catch (error) {
       console.error('참가자 수정 실패:', error)
     }
-  }, [editForm, participants, setParticipants, setEditingParticipant])
+  }, [editForm, participants, editingParticipant, setParticipants, setEditingParticipant])
 
   // 참가자 정보 수정 취소
   const cancelEditParticipant = useCallback(() => {
@@ -152,7 +154,7 @@ export function useParticipantActions({
           [currentRound]: [...existingMemberIds]
         }
         newParticipantData.allMetPeople = [...existingMemberIds]
-        newParticipantData.groupHistory = [{ round: currentRound, groupNumber: groupId }]
+        newParticipantData.groupHistory = [groupId]
       }
 
       const updatedParticipants = [...participants, newParticipantData]

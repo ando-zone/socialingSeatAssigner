@@ -74,7 +74,8 @@ export default function Home() {
         const urlMeetingId = urlParams.get('meeting')
         
         if (urlMeetingId) {
-          const { createSupabaseClient, getCurrentMeetingId, setCurrentMeetingId, getUserMeetings } = await import('@/utils/database')
+          const { getCurrentMeetingId, setCurrentMeetingId, getUserMeetings } = await import('@/utils/database')
+          const { createSupabaseClient } = await import('@/lib/supabase')
           const supabase = createSupabaseClient()
           
           if (supabase) {
@@ -413,7 +414,7 @@ export default function Home() {
         // 페이지 새로고침으로 데이터 다시 로드
         window.location.reload()
       } else {
-        alert(`데이터 가져오기 실패: ${result.error}`)
+        alert(`데이터 가져오기 실패: ${result.message}`)
       }
     } catch (error) {
       console.error('데이터 가져오기 실패:', error)

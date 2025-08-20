@@ -475,7 +475,7 @@ function optimizeNewMeetings(groups: Participant[][], participants: Participant[
             group2[p2] = person1
             
             // 성비 제약조건 체크 (성비가 최우선순위!)
-            const genderConstraintValid = checkGenderConstraints(groups, genderConstraints)
+            const genderConstraintValid = checkGenderConstraints(groups, genderConstraints || [])
             
             if (genderConstraintValid) {
               // 성비가 유지되는 경우에만 새로운 만남 점수 계산
