@@ -74,6 +74,12 @@ export default function GroupCard({
   getCurrentRoundMeetings,
   getPreviousRoundsMeetings
 }: GroupCardProps) {
+  // 성비 및 MBTI 비율 계산
+  const maleCount = group.members.filter(m => m.gender === 'male').length
+  const femaleCount = group.members.filter(m => m.gender === 'female').length
+  const extrovertCount = group.members.filter(m => m.mbti === 'extrovert').length
+  const introvertCount = group.members.filter(m => m.mbti === 'introvert').length
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-4">
@@ -89,6 +95,73 @@ export default function GroupCard({
               신규 만남: {group.newMeetingsCount}쌍
             </span>
           )}
+        </div>
+      </div>
+
+      {/* 성비 및 MBTI 비율 표시 */}
+      <div className="mb-4 space-y-3">
+        {/* 성비 비주얼 */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-gray-600 font-medium text-sm">성비</span>
+            <div className="flex items-center space-x-1 text-xs">
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
+                <span className="text-blue-600 font-medium">{maleCount}</span>
+              </div>
+              <span className="text-gray-400">:</span>
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-pink-500 rounded-full mr-1"></div>
+                <span className="text-pink-600 font-medium">{femaleCount}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
+            {maleCount > 0 && (
+              <div 
+                className="bg-blue-500 h-full transition-all duration-300"
+                style={{ width: `${(maleCount / group.members.length) * 100}%` }}
+              ></div>
+            )}
+            {femaleCount > 0 && (
+              <div 
+                className="bg-pink-500 h-full transition-all duration-300"
+                style={{ width: `${(femaleCount / group.members.length) * 100}%` }}
+              ></div>
+            )}
+          </div>
+        </div>
+        
+        {/* MBTI 비율 비주얼 */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-gray-600 font-medium text-sm">MBTI</span>
+            <div className="flex items-center space-x-1 text-xs">
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-orange-500 rounded-full mr-1"></div>
+                <span className="text-orange-600 font-medium">{extrovertCount}</span>
+              </div>
+              <span className="text-gray-400">:</span>
+              <div className="flex items-center">
+                <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
+                <span className="text-purple-600 font-medium">{introvertCount}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
+            {extrovertCount > 0 && (
+              <div 
+                className="bg-orange-500 h-full transition-all duration-300"
+                style={{ width: `${(extrovertCount / group.members.length) * 100}%` }}
+              ></div>
+            )}
+            {introvertCount > 0 && (
+              <div 
+                className="bg-purple-500 h-full transition-all duration-300"
+                style={{ width: `${(introvertCount / group.members.length) * 100}%` }}
+              ></div>
+            )}
+          </div>
         </div>
       </div>
 
