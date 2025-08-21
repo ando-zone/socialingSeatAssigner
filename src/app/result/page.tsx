@@ -211,20 +211,22 @@ export default function ResultPage() {
           </div>
         </div>
 
+        {/* 공통 라운드 선택 - History 탭이 아닐 때만 표시 */}
+        {activeTab !== 'history' && (
+          <RoundSelector
+            availableRounds={availableRounds}
+            currentRound={result.round}
+            selectedRound={selectedGroupsRound}
+            onRoundSelect={selectGroupsRound}
+            onReturnToCurrent={returnToCurrentRound}
+            icon={activeTab === 'groups' ? "📊" : activeTab === 'seating' ? "🪑" : "📊"}
+            description={activeTab === 'groups' ? "결과" : activeTab === 'seating' ? "좌석" : "통계"}
+          />
+        )}
+
         {/* Groups Tab */}
         {activeTab === 'groups' && (
           <>
-            {/* 라운드 선택 */}
-            <RoundSelector
-              availableRounds={availableRounds}
-              currentRound={result.round}
-              selectedRound={selectedGroupsRound}
-              onRoundSelect={selectGroupsRound}
-              onReturnToCurrent={returnToCurrentRound}
-              icon="📊"
-              description="결과"
-            />
-
             {/* 요약 통계 */}
             <GroupResultsSummary
               result={displayResult}
@@ -275,16 +277,6 @@ export default function ResultPage() {
         {/* Seating Tab */}
         {activeTab === 'seating' && result && (
           <div className="space-y-6">
-            <RoundSelector
-              availableRounds={availableRounds}
-              currentRound={result.round}
-              selectedRound={selectedGroupsRound}
-              onRoundSelect={selectGroupsRound}
-              onReturnToCurrent={returnToCurrentRound}
-              icon="🪑"
-              description="좌석"
-            />
-            
             <SeatingChart 
               groups={(selectedGroupsRound && groupsRoundResult ? groupsRoundResult : result).groups} 
               participants={participants}
@@ -298,16 +290,6 @@ export default function ResultPage() {
         {/* Stats Tab */}
         {activeTab === 'stats' && (
           <div className="space-y-6">
-            <RoundSelector
-              availableRounds={availableRounds}
-              currentRound={result.round}
-              selectedRound={selectedGroupsRound}
-              onRoundSelect={selectGroupsRound}
-              onReturnToCurrent={returnToCurrentRound}
-              icon="📊"
-              description="통계"
-            />
-            
             <ParticipantStats 
               result={displayResult}
               participants={participants}

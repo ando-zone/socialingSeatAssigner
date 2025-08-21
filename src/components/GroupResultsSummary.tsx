@@ -32,7 +32,7 @@ export default function GroupResultsSummary({
         )}
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="text-center p-4 bg-blue-50 rounded-lg">
           <div className="text-2xl font-bold text-blue-600">{result.summary.totalGroups}</div>
           <div className="text-sm text-gray-600">총 그룹 수</div>
@@ -49,14 +49,6 @@ export default function GroupResultsSummary({
           <div className="text-xs text-emerald-600 mt-1">
             {Math.round((Object.values(checkInStatus).filter(Boolean).length / Math.max(participantCount, 1)) * 100)}%
           </div>
-        </div>
-        <div className="text-center p-4 bg-yellow-50 rounded-lg">
-          <div className="text-2xl font-bold text-yellow-600">{result.summary.newMeetingsCount}</div>
-          <div className="text-sm text-gray-600">새로운 만남</div>
-        </div>
-        <div className="text-center p-4 bg-purple-50 rounded-lg">
-          <div className="text-2xl font-bold text-purple-600">{result.round}</div>
-          <div className="text-sm text-gray-600">라운드</div>
         </div>
       </div>
 
