@@ -300,29 +300,6 @@ export default function GroupCard({
                         )}
                       </div>
 
-                      {/* 만남 정보 표시 */}
-                      <div className="mt-2 text-xs">
-                        {(() => {
-                          const previousMeetings = getPreviousRoundsMeetings(member.id)
-                          const currentRoundMeetings = getCurrentRoundMeetings(member.id)
-                          const newInCurrentRound = currentRoundMeetings.filter(meetingId => 
-                            !previousMeetings.includes(meetingId)
-                          ).length
-
-                          return (
-                            <div className="space-y-1">
-                              <div className="text-gray-600">
-                                <span className="font-medium">전체 만남:</span> {previousMeetings.length}명
-                              </div>
-                              {newInCurrentRound > 0 && (
-                                <div className="text-green-600">
-                                  <span className="font-medium">새로운 만남:</span> {newInCurrentRound}명
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -388,12 +365,6 @@ export default function GroupCard({
           ) : null}
         </div>
 
-        {/* 새로운 만남 표시 */}
-        <div className="mt-3 pt-3 border-t border-gray-200">
-          <div className="text-xs text-green-600">
-            새로운 만남: {group.newMeetingsCount}쌍
-          </div>
-        </div>
       </div>
     </div>
   )
