@@ -251,6 +251,16 @@ export default function GroupCard({
                             {member.mbti === 'extrovert' ? 'E' : 'I'} • {' '}
                             체크인: {isCheckedIn ? '✅' : '⏳'}
                           </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            그룹 히스토리: {(() => {
+                              const history = [...(member.groupHistory || [])]
+                              // 마지막 항목이 현재 그룹과 다르면 추가
+                              if (history[history.length - 1] !== group.id) {
+                                history.push(group.id)
+                              }
+                              return history.join('-')
+                            })()}
+                          </div>
                         </div>
                         
                         {!isSelected && !isSwapTarget && (

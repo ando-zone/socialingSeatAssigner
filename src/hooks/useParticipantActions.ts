@@ -233,22 +233,82 @@ export function useParticipantActions({
 
       const updatedGroups = [...result.groups]
       
-      // 참가자들의 그룹 멤버십 업데이트
+      // 참가자들의 그룹 히스토리와 미팅 히스토리 업데이트
+      const currentRound = result.round
+      
+      // 새로운 그룹원들 목록 계산
+      const newGroup1Members = updatedGroups[group1Index].members.filter(m => m.id !== participantId1).map(m => m.id)
+      const newGroup2Members = updatedGroups[group2Index].members.filter(m => m.id !== participantId2).map(m => m.id)
+      
+      const updatedParticipant1 = {
+        ...participant1,
+        groupHistory: [...participant1.groupHistory.slice(0, -1), updatedGroups[group2Index].id],
+        meetingsByRound: {
+          ...participant1.meetingsByRound,
+          [currentRound]: newGroup2Members
+        }
+      }
+      const updatedParticipant2 = {
+        ...participant2,
+        groupHistory: [...participant2.groupHistory.slice(0, -1), updatedGroups[group1Index].id],
+        meetingsByRound: {
+          ...participant2.meetingsByRound,
+          [currentRound]: newGroup1Members
+        }
+      }
+
+      // 참가자들의 그룹 멤버십 업데이트 및 기존 그룹원들의 미팅 기록 업데이트
       updatedGroups[group1Index] = {
         ...updatedGroups[group1Index],
-        members: updatedGroups[group1Index].members.map(m => 
-          m.id === participantId1 ? participant2 : m
-        )
+        members: updatedGroups[group1Index].members.map(m => {
+          if (m.id === participantId1) {
+            return updatedParticipant2
+          } else {
+            // 기존 그룹원들의 미팅 기록에서 participant1을 participant2로 교체
+            const updatedMeetings = [...(m.meetingsByRound[currentRound] || [])]
+            const participant1Index = updatedMeetings.indexOf(participantId1)
+            if (participant1Index !== -1) {
+              updatedMeetings[participant1Index] = participantId2
+            }
+            return {
+              ...m,
+              meetingsByRound: {
+                ...m.meetingsByRound,
+                [currentRound]: updatedMeetings
+              }
+            }
+          }
+        })
       }
       
       updatedGroups[group2Index] = {
         ...updatedGroups[group2Index],
-        members: updatedGroups[group2Index].members.map(m => 
-          m.id === participantId2 ? participant1 : m
-        )
+        members: updatedGroups[group2Index].members.map(m => {
+          if (m.id === participantId2) {
+            return updatedParticipant1
+          } else {
+            // 기존 그룹원들의 미팅 기록에서 participant2를 participant1으로 교체
+            const updatedMeetings = [...(m.meetingsByRound[currentRound] || [])]
+            const participant2Index = updatedMeetings.indexOf(participantId2)
+            if (participant2Index !== -1) {
+              updatedMeetings[participant2Index] = participantId1
+            }
+            return {
+              ...m,
+              meetingsByRound: {
+                ...m.meetingsByRound,
+                [currentRound]: updatedMeetings
+              }
+            }
+          }
+        })
       }
 
       const updatedResult = { ...result, groups: updatedGroups }
+      
+      // participants 상태도 업데이트 (모든 그룹의 멤버들로부터 참가자 정보 추출)
+      const updatedParticipants = updatedGroups.flatMap(group => group.members)
+      setParticipants(updatedParticipants)
       
       const { saveGroupingResult } = await import('@/utils/database')
       await saveGroupingResult(updatedResult)
