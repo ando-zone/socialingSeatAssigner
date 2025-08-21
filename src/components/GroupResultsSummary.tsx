@@ -19,17 +19,8 @@ export default function GroupResultsSummary({
 }: GroupResultsSummaryProps) {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4">
         <h2 className="text-xl font-semibold">배치 요약</h2>
-        {participantCount > 0 && !isViewingPastRound && onResetAllCheckIn && (
-          <button
-            onClick={onResetAllCheckIn}
-            className="text-sm bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded transition-colors"
-            title="모든 입장 체크 초기화"
-          >
-            🔄 체크인 초기화
-          </button>
-        )}
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

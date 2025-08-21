@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import SeatingChart from '@/components/SeatingChart'
 import RoundSelector from '@/components/RoundSelector'
 import GroupResultsSummary from '@/components/GroupResultsSummary'
@@ -12,6 +12,8 @@ import { useResultPage } from '@/hooks/useResultPage'
 import { useParticipantActions } from '@/hooks/useParticipantActions'
 
 export default function ResultPage() {
+  const [toastVisible, setToastVisible] = useState(false)
+  
   const {
     result,
     participants,
@@ -91,6 +93,15 @@ export default function ResultPage() {
     return selectedGroupsRound && selectedGroupsRound !== result?.round
   }, [selectedGroupsRound, result?.round])
 
+  // 토스트 애니메이션 효과
+  useEffect(() => {
+    if (swapMessage) {
+      setToastVisible(true)
+    } else {
+      setToastVisible(false)
+    }
+  }, [swapMessage])
+
   // Helper functions
   const getCurrentRoundMeetings = (participantId: string): string[] => {
     if (!result) return []
@@ -154,10 +165,30 @@ export default function ResultPage() {
           </button>
         </div>
 
-        {/* 메시지 표시 */}
+        {/* 토스트 메시지 */}
         {swapMessage && (
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
-            {swapMessage}
+          <div className={`fixed top-4 right-4 sm:right-4 left-4 sm:left-auto z-50 transform transition-all duration-300 ease-in-out ${
+            toastVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
+          }`}>
+            <div className="bg-green-500 text-white px-4 py-3 sm:px-6 rounded-lg shadow-lg flex items-center space-x-3 max-w-sm mx-auto sm:mx-0">
+              <div className="flex-shrink-0">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1 text-sm font-medium">
+                {swapMessage}
+              </div>
+              <button
+                onClick={() => setSwapMessage(null)}
+                className="flex-shrink-0 text-white hover:text-gray-200 transition-colors"
+                aria-label="알림 닫기"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
           </div>
         )}
 
@@ -282,6 +313,7 @@ export default function ResultPage() {
               participants={participants}
               checkInStatus={checkInStatus}
               onToggleCheckIn={toggleCheckIn}
+              onResetAllCheckIn={!isViewingPastRound ? resetAllCheckIn : undefined}
               onPrint={() => window.print()}
             />
           </div>
