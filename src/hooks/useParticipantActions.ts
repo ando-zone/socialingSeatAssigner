@@ -157,12 +157,42 @@ export function useParticipantActions({
         newParticipantData.groupHistory = [groupId]
       }
 
-      const updatedParticipants = [...participants, newParticipantData]
+      // 전체 participants 업데이트 (기존 그룹원들의 만남 기록에 새 참가자 추가)
+      const updatedParticipants = participants.map(p => {
+        if (group && group.members.some(m => m.id === p.id)) {
+          return {
+            ...p,
+            meetingsByRound: {
+              ...p.meetingsByRound,
+              [currentRound]: [...(p.meetingsByRound[currentRound] || []), newParticipantData.id]
+            },
+            allMetPeople: p.allMetPeople.includes(newParticipantData.id) 
+              ? p.allMetPeople 
+              : [...p.allMetPeople, newParticipantData.id]
+          }
+        } else {
+          // 다른 그룹의 참가자들도 현재 라운드 정보가 없다면 빈 배열로 초기화
+          return {
+            ...p,
+            meetingsByRound: {
+              ...p.meetingsByRound,
+              [currentRound]: p.meetingsByRound[currentRound] || []
+            }
+          }
+        }
+      })
+      
+      // 새 참가자 추가
+      updatedParticipants.push(newParticipantData)
+      setParticipants(updatedParticipants)
 
       // 결과 업데이트
       const updatedGroups = result.groups.map(g => 
         g.id === groupId 
-          ? { ...g, members: [...g.members, newParticipantData] }
+          ? { ...g, members: [...g.members.map(m => {
+              const updatedMember = updatedParticipants.find(p => p.id === m.id)
+              return updatedMember || m
+            }), newParticipantData] }
           : g
       )
       
