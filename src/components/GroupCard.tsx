@@ -243,13 +243,22 @@ export default function GroupCard({
                     <div className={`p-2 rounded ${
                       isSelected ? 'bg-blue-200 border-2 border-blue-400' :
                       isSwapTarget ? 'bg-orange-200 border-2 border-orange-400' :
-                      showCheckIn && isCheckedIn ? 'bg-green-100 border-l-4 border-green-500' : 'bg-gray-50'
+                      showCheckIn && isCheckedIn ? 'bg-green-100 border-l-4 border-green-500' :
+                      member.gender === 'male' ? 'bg-blue-50 border-l-2 border-blue-300' :
+                      'bg-pink-50 border-l-2 border-pink-300'
                     }`}>
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="font-medium text-sm">{member.name}</div>
+                          <div className="font-medium text-sm flex items-center gap-1">
+                            <span className={`w-2 h-2 rounded-full ${
+                              member.gender === 'male' ? 'bg-blue-500' : 'bg-pink-500'
+                            }`}></span>
+                            {member.name}
+                          </div>
                           <div className="text-xs text-gray-600">
-                            {member.gender === 'male' ? '남성' : '여성'} • {' '}
+                            <span className={member.gender === 'male' ? 'text-blue-600 font-medium' : 'text-pink-600 font-medium'}>
+                              {member.gender === 'male' ? '남성' : '여성'}
+                            </span> • {' '}
                             {member.mbti === 'extrovert' ? 'E' : 'I'}
                             {showCheckIn && (
                               <span> • 체크인: {isCheckedIn ? '✅' : '⏳'}</span>
