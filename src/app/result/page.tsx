@@ -269,13 +269,16 @@ export default function ResultPage() {
 
             {/* 그룹 카드들 */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayResult.groups.filter(group => group.members.length > 0).map((group) => (
+              {displayResult.groups.filter(group => group.members.length > 0).map((group) => {
+                const isSeatingTab: boolean = (activeTab as string) === 'seating'
+                return (
                 <GroupCard
                   key={group.id}
                   group={group}
                   checkInStatus={checkInStatus}
                   isViewingPastRound={!!isViewingPastRound}
                   isMobile={isMobile}
+                  showCheckIn={isSeatingTab}
                   selectedParticipant={selectedParticipant}
                   swapSelectedParticipant={swapSelectedParticipant}
                   editingParticipant={editingParticipant}
@@ -299,7 +302,8 @@ export default function ResultPage() {
                   getCurrentRoundMeetings={getCurrentRoundMeetings}
                   getPreviousRoundsMeetings={getPreviousRoundsMeetings}
                 />
-              ))}
+                )
+              })}
             </div>
 
           </>

@@ -12,6 +12,7 @@ interface GroupCardProps {
   checkInStatus: { [participantId: string]: boolean }
   isViewingPastRound?: boolean
   isMobile: boolean
+  showCheckIn?: boolean
   selectedParticipant: string | null
   swapSelectedParticipant: { id: string, groupId: number } | null
   editingParticipant: string | null
@@ -51,6 +52,7 @@ export default function GroupCard({
   checkInStatus,
   isViewingPastRound = false,
   isMobile,
+  showCheckIn = false,
   selectedParticipant,
   swapSelectedParticipant,
   editingParticipant,
@@ -241,15 +243,17 @@ export default function GroupCard({
                     <div className={`p-2 rounded ${
                       isSelected ? 'bg-blue-200 border-2 border-blue-400' :
                       isSwapTarget ? 'bg-orange-200 border-2 border-orange-400' :
-                      isCheckedIn ? 'bg-green-100 border-l-4 border-green-500' : 'bg-gray-50'
+                      showCheckIn && isCheckedIn ? 'bg-green-100 border-l-4 border-green-500' : 'bg-gray-50'
                     }`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium text-sm">{member.name}</div>
                           <div className="text-xs text-gray-600">
                             {member.gender === 'male' ? '남성' : '여성'} • {' '}
-                            {member.mbti === 'extrovert' ? 'E' : 'I'} • {' '}
-                            체크인: {isCheckedIn ? '✅' : '⏳'}
+                            {member.mbti === 'extrovert' ? 'E' : 'I'}
+                            {showCheckIn && (
+                              <span> • 체크인: {isCheckedIn ? '✅' : '⏳'}</span>
+                            )}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
                             그룹 히스토리: {[...(member.groupHistory || []), group.id].join('-')}
@@ -258,23 +262,25 @@ export default function GroupCard({
                         
                         {!isSelected && !isSwapTarget && (
                           <div className="flex gap-1">
-                            <button
-                              disabled={isViewingPastRound}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onToggleCheckIn(member.id)
-                              }}
-                              className={`text-sm px-2 py-1 rounded transition-colors ${
-                                isViewingPastRound 
-                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                  : isCheckedIn 
-                                  ? 'text-red-600 hover:text-red-800 hover:bg-red-100' 
-                                  : 'text-green-600 hover:text-green-800 hover:bg-green-100'
-                              }`}
-                              title={isCheckedIn ? '입장 취소' : '입장 체크'}
-                            >
-                              {isCheckedIn ? '❌' : '✅'}
-                            </button>
+                            {showCheckIn && (
+                              <button
+                                disabled={isViewingPastRound}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onToggleCheckIn(member.id)
+                                }}
+                                className={`text-sm px-2 py-1 rounded transition-colors ${
+                                  isViewingPastRound 
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                    : isCheckedIn 
+                                    ? 'text-red-600 hover:text-red-800 hover:bg-red-100' 
+                                    : 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                                }`}
+                                title={isCheckedIn ? '입장 취소' : '입장 체크'}
+                              >
+                                {isCheckedIn ? '❌' : '✅'}
+                              </button>
+                            )}
                             <button
                               disabled={isViewingPastRound}
                               onClick={() => onStartEditParticipant(member.id)}
