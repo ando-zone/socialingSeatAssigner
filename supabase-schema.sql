@@ -4,6 +4,7 @@ create table public.meetings (
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   current_round integer default 1 not null,
+  table_layout_url text null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -281,5 +282,17 @@ BEGIN
         AND column_name = 'is_checked_in'
     ) THEN
         ALTER TABLE public.participants ADD COLUMN is_checked_in boolean DEFAULT false NOT NULL;
+    END IF;
+END $$;
+
+-- 기존 meetings 테이블에 table_layout_url 컬럼 추가 (마이그레이션)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'meetings' 
+        AND column_name = 'table_layout_url'
+    ) THEN
+        ALTER TABLE public.meetings ADD COLUMN table_layout_url text NULL;
     END IF;
 END $$; 

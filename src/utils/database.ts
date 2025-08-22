@@ -365,6 +365,161 @@ export const getCheckInStatuses = async (): Promise<{[participantId: string]: bo
   }
 }
 
+// 테이블 레이아웃 이미지 업로드
+export const uploadTableLayout = async (file: File): Promise<string | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) {
+    console.error('❌ 테이블 레이아웃 업로드 실패: 활성 모임 ID가 없습니다')
+    return null
+  }
+
+  const supabase = createSupabaseClient()
+  if (!supabase) {
+    console.error('❌ 테이블 레이아웃 업로드 실패: Supabase 클라이언트가 없습니다')
+    return null
+  }
+
+  try {
+    // 파일명 생성 (모임ID + 타임스탬프)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `table-layout-${meetingId}-${Date.now()}.${fileExt}`
+    const filePath = `table-layouts/${fileName}`
+
+    console.log('📤 테이블 레이아웃 업로드 시작:', { fileName, fileSize: file.size })
+
+    // Supabase Storage에 업로드
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('table-layouts')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (uploadError) {
+      console.error('❌ Supabase Storage 업로드 오류:', uploadError)
+      return null
+    }
+
+    // 공개 URL 생성
+    const { data: urlData } = supabase.storage
+      .from('table-layouts')
+      .getPublicUrl(filePath)
+
+    if (!urlData?.publicUrl) {
+      console.error('❌ 공개 URL 생성 실패')
+      return null
+    }
+
+    // meetings 테이블에 URL 저장
+    const { error: updateError } = await supabase
+      .from('meetings')
+      .update({ table_layout_url: urlData.publicUrl })
+      .eq('id', meetingId)
+
+    if (updateError) {
+      console.error('❌ meetings 테이블 업데이트 오류:', updateError)
+      // 업로드된 파일 삭제
+      await supabase.storage.from('table-layouts').remove([filePath])
+      return null
+    }
+
+    console.log('✅ 테이블 레이아웃 업로드 완료:', urlData.publicUrl)
+    return urlData.publicUrl
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 업로드 중 오류:', error)
+    return null
+  }
+}
+
+// 테이블 레이아웃 이미지 삭제
+export const deleteTableLayout = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+
+  try {
+    // 현재 이미지 URL 조회
+    const { data: meetingData } = await supabase
+      .from('meetings')
+      .select('table_layout_url')
+      .eq('id', meetingId)
+      .single()
+
+    if (!meetingData?.table_layout_url) {
+      console.log('삭제할 테이블 레이아웃 이미지가 없습니다.')
+      return true
+    }
+
+    // URL에서 파일 경로 추출
+    const url = meetingData.table_layout_url
+    const filePath = url.split('/table-layouts/')[1]
+
+    if (filePath) {
+      // Storage에서 파일 삭제
+      const { error: deleteError } = await supabase.storage
+        .from('table-layouts')
+        .remove([`table-layouts/${filePath}`])
+
+      if (deleteError) {
+        console.error('❌ Storage 파일 삭제 오류:', deleteError)
+      } else {
+        console.log('✅ Storage 파일 삭제 완료')
+      }
+    }
+
+    // meetings 테이블에서 URL 제거
+    const { error: updateError } = await supabase
+      .from('meetings')
+      .update({ table_layout_url: null })
+      .eq('id', meetingId)
+
+    if (updateError) {
+      console.error('❌ meetings 테이블 업데이트 오류:', updateError)
+      return false
+    }
+
+    console.log('✅ 테이블 레이아웃 삭제 완료')
+    return true
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 삭제 중 오류:', error)
+    return false
+  }
+}
+
+// 테이블 레이아웃 이미지 URL 조회
+export const getTableLayoutUrl = async (): Promise<string | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return null
+
+  const supabase = createSupabaseClient()
+  if (!supabase) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('table_layout_url')
+      .eq('id', meetingId)
+      .single()
+
+    if (error) {
+      // table_layout_url 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('table_layout_url')) {
+        console.warn('⚠️ table_layout_url 컬럼이 없습니다. null을 반환합니다.')
+        return null
+      }
+      console.error('❌ 테이블 레이아웃 URL 조회 오류:', error)
+      return null
+    }
+
+    return data?.table_layout_url || null
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 URL 조회 중 오류:', error)
+    return null
+  }
+}
+
 // 데이터베이스 테이블 구조 확인용 (디버깅)
 export const checkTableStructure = async (): Promise<void> => {
   const supabase = createSupabaseClient()

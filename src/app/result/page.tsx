@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useState } from 'react'
 import SeatingChart from '@/components/SeatingChart'
+import TableLayoutUpload from '@/components/TableLayoutUpload'
 import RoundSelector from '@/components/RoundSelector'
 import GroupResultsSummary from '@/components/GroupResultsSummary'
 import GroupCard from '@/components/GroupCard'
@@ -13,6 +14,7 @@ import { useParticipantActions } from '@/hooks/useParticipantActions'
 
 export default function ResultPage() {
   const [toastVisible, setToastVisible] = useState(false)
+  const [tableLayoutUrl, setTableLayoutUrl] = useState<string | null>(null)
   
   const {
     result,
@@ -132,6 +134,62 @@ export default function ResultPage() {
     
     return Array.from(previousMeetings)
   }
+
+  // 테이블 레이아웃 로드
+  useEffect(() => {
+    const loadTableLayout = async () => {
+      try {
+        const { getTableLayoutUrl } = await import('@/utils/database')
+        const url = await getTableLayoutUrl()
+        setTableLayoutUrl(url)
+      } catch (error) {
+        console.error('테이블 레이아웃 로드 실패:', error)
+      }
+    }
+    loadTableLayout()
+  }, [])
+
+  // 이미지 업로드 핸들러
+  const handleImageUpload = async (file: File): Promise<boolean> => {
+    try {
+      const { uploadTableLayout } = await import('@/utils/database')
+      const url = await uploadTableLayout(file)
+      if (url) {
+        setTableLayoutUrl(url)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('이미지 업로드 실패:', error)
+      return false
+    }
+  }
+
+  // 이미지 삭제 핸들러
+  const handleImageDelete = async (): Promise<boolean> => {
+    try {
+      const { deleteTableLayout } = await import('@/utils/database')
+      const success = await deleteTableLayout()
+      if (success) {
+        setTableLayoutUrl(null)
+      }
+      return success
+    } catch (error) {
+      console.error('이미지 삭제 실패:', error)
+      return false
+    }
+  }
+
+  // 테이블 레이아웃 업로드 섹션 컴포넌트
+  const TableLayoutUploadSection = () => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <TableLayoutUpload
+        currentImageUrl={tableLayoutUrl}
+        onImageUpload={handleImageUpload}
+        onImageDelete={handleImageDelete}
+      />
+    </div>
+  )
 
   if (!result || !displayResult) {
     return (
@@ -309,6 +367,10 @@ export default function ResultPage() {
         {/* Seating Tab */}
         {activeTab === 'seating' && result && (
           <div className="space-y-6">
+            {/* 테이블 배치도 업로드 섹션 (편집 모드일 때만) */}
+            {!isViewingPastRound && <TableLayoutUploadSection />}
+            
+            {/* 기존 좌석 배치도 */}
             <SeatingChart 
               groups={(selectedGroupsRound && groupsRoundResult ? groupsRoundResult : result).groups} 
               participants={participants}
