@@ -141,8 +141,8 @@ export async function getSnapshots(): Promise<Snapshot[]> {
       data: item.data
     }))
     
-    // 시간순 정렬 (ID는 타임스탬프 기반이므로 ID로 정렬)
-    snapshots.sort((a: any, b: any) => a.id - b.id)
+    // 최신순 정렬 (ID는 타임스탬프 기반이므로 ID로 내림차순 정렬)
+    snapshots.sort((a: any, b: any) => b.id - a.id)
     
     console.log(`📋 총 ${snapshots.length}개 스냅샷 반환`)
     return snapshots
