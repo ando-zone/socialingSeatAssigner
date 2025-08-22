@@ -330,6 +330,41 @@ export const resetAllCheckInStatus = async (): Promise<boolean> => {
   }
 }
 
+// 체크인 상태만 조회하는 함수 (폴링용)
+export const getCheckInStatuses = async (): Promise<{[participantId: string]: boolean}> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return {}
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return {}
+  
+  try {
+    const { data, error } = await supabase
+      .from('participants')
+      .select('id, is_checked_in')
+      .eq('meeting_id', meetingId)
+
+    if (error) {
+      // is_checked_in 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+        console.warn('⚠️ is_checked_in 컬럼이 없습니다. 빈 상태를 반환합니다.')
+        return {}
+      }
+      throw error
+    }
+
+    const checkInStatuses: {[participantId: string]: boolean} = {}
+    data?.forEach(p => {
+      checkInStatuses[p.id] = p.is_checked_in || false
+    })
+    
+    return checkInStatuses
+  } catch (error) {
+    console.error('체크인 상태 조회 중 오류:', error)
+    return {}
+  }
+}
+
 // 데이터베이스 테이블 구조 확인용 (디버깅)
 export const checkTableStructure = async (): Promise<void> => {
   const supabase = createSupabaseClient()

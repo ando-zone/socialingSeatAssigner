@@ -18,6 +18,7 @@ create table public.participants (
   meetings_by_round jsonb default '{}' not null,
   all_met_people text[] default array[]::text[] not null,
   group_history integer[] default array[]::integer[] not null,
+  is_checked_in boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -268,4 +269,17 @@ create trigger set_updated_at_grouping_results
 
 create trigger set_updated_at_group_settings
   before update on public.group_settings
-  for each row execute function public.handle_updated_at(); 
+  for each row execute function public.handle_updated_at();
+
+-- 기존 participants 테이블에 is_checked_in 컬럼 추가 (마이그레이션)
+-- 이미 존재하는 경우 에러를 무시하고 계속 진행
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'participants' 
+        AND column_name = 'is_checked_in'
+    ) THEN
+        ALTER TABLE public.participants ADD COLUMN is_checked_in boolean DEFAULT false NOT NULL;
+    END IF;
+END $$; 

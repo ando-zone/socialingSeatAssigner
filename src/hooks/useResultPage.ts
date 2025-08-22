@@ -115,6 +115,51 @@ export function useResultPage() {
     loadData()
   }, [loadData])
 
+  // 폴링 방식으로 체크인 상태 동기화
+  useEffect(() => {
+    if (!result) return
+
+    console.log('🔄 체크인 상태 폴링 시작 (1초마다 체크)')
+    
+    const pollCheckInStatus = async () => {
+      try {
+        const { getCheckInStatuses } = await import('@/utils/database')
+        const latestStatuses = await getCheckInStatuses()
+        
+        // 현재 상태와 비교하여 변경된 부분만 업데이트
+        setCheckInStatus(prevStatuses => {
+          let hasChanges = false
+          const updatedStatuses = { ...prevStatuses }
+          
+          Object.entries(latestStatuses).forEach(([participantId, isChecked]) => {
+            if (prevStatuses[participantId] !== isChecked) {
+              hasChanges = true
+              updatedStatuses[participantId] = isChecked
+              
+              const participantName = participants.find(p => p.id === participantId)?.name
+              console.log(`🔄 ${participantName}의 체크인 상태가 ${isChecked ? '체크됨' : '해제됨'}으로 동기화됨`)
+            }
+          })
+          
+          return hasChanges ? updatedStatuses : prevStatuses
+        })
+      } catch (error) {
+        console.error('❌ 체크인 상태 폴링 중 오류:', error)
+      }
+    }
+
+    // 초기 로드
+    pollCheckInStatus()
+    
+    // 1초마다 폴링
+    const interval = setInterval(pollCheckInStatus, 1000)
+    
+    return () => {
+      console.log('🔄 체크인 상태 폴링 정리')
+      clearInterval(interval)
+    }
+  }, [result, participants])
+
   // Round selection functions
   const selectHistoryRound = useCallback(async (round: number) => {
     try {
