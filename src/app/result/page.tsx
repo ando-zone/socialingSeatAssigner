@@ -229,15 +229,12 @@ export default function ResultPage() {
               참가자 통계
             </button>
             <button
-              onClick={() => setActiveTab('history')}
-              className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
-                activeTab === 'history'
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
+              disabled
+              className="flex-1 py-4 px-6 text-center font-medium transition-colors cursor-not-allowed text-gray-300 bg-gray-50"
+              title="기능 개발 예정"
             >
               <span className="text-lg mr-2">📜</span>
-              라운드 히스토리
+              라운드 히스토리 (예정)
             </button>
           </div>
         </div>
@@ -337,89 +334,21 @@ export default function ResultPage() {
         {/* History Tab */}
         {activeTab === 'history' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center">
-                <span className="text-purple-500 mr-2">📜</span>
-                라운드 히스토리
+            <div className="bg-white rounded-lg shadow-md p-12 text-center">
+              <div className="text-6xl mb-4">🚧</div>
+              <h2 className="text-xl font-semibold mb-4 text-gray-700">
+                라운드 히스토리 기능 개발 예정
               </h2>
-              <p className="text-gray-600 mb-4">지난 라운드들의 그룹 배치 결과를 확인할 수 있습니다.</p>
-              
-              {availableRounds.length > 0 ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      확인할 라운드를 선택하세요:
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {availableRounds.map(round => (
-                        <button
-                          key={round}
-                          onClick={() => selectHistoryRound(round)}
-                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            selectedHistoryRound === round
-                              ? 'bg-purple-600 text-white'
-                              : round === result?.round
-                                ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {round}라운드
-                          {round === result?.round && (
-                            <span className="ml-1 text-xs">(현재)</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {historyResult && selectedHistoryRound && (
-                    <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-                      <h3 className="font-semibold text-purple-800 mb-2">
-                        {selectedHistoryRound}라운드 결과
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-purple-600 font-medium">총 그룹:</span> {historyResult.summary.totalGroups}개
-                        </div>
-                        <div>
-                          <span className="text-purple-600 font-medium">새로운 만남:</span> {historyResult.summary.newMeetingsCount}쌍
-                        </div>
-                        <div>
-                          <span className="text-purple-600 font-medium">총 만남:</span> {historyResult.summary.newMeetingsCount}쌍
-                        </div>
-                        <div>
-                          <span className="text-purple-600 font-medium">성별 균형:</span> {historyResult.summary.genderBalanceScore}%
-                        </div>
-                      </div>
-                      
-                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {historyResult.groups.map(group => (
-                          <div key={group.id} className="bg-white p-3 rounded border">
-                            <div className="font-medium text-sm mb-2">그룹 {group.id} ({group.members.length}명)</div>
-                            <div className="text-xs space-y-1">
-                              {group.members.map(member => (
-                                <div key={member.id} className="text-gray-600">
-                                  {member.name} ({member.gender === 'male' ? '남' : '여'})
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <p className="text-sm text-purple-700 mt-4">
-                        <strong>히스토리 모드:</strong> 이 화면은 {selectedHistoryRound}라운드의 과거 결과를 보여줍니다. 
-                        편집이나 수정은 현재 라운드에서만 가능합니다.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <p>아직 저장된 라운드가 없습니다.</p>
-                  <p className="text-sm mt-2">첫 번째 라운드를 진행해주세요!</p>
-                </div>
-              )}
+              <p className="text-gray-500 mb-6">
+                지난 라운드들의 그룹 배치 결과를 확인할 수 있는 기능이<br />
+                곧 추가될 예정입니다.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 inline-block">
+                <p className="text-sm text-blue-700">
+                  💡 현재는 <strong>그룹 결과</strong> 탭에서 라운드 선택으로<br />
+                  이전 라운드 결과를 확인하실 수 있습니다.
+                </p>
+              </div>
             </div>
           </div>
         )}
