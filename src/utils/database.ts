@@ -19,6 +19,7 @@ export interface DBParticipant {
   meetings_by_round: Record<string, string[]>
   all_met_people: string[]
   group_history: number[]
+  is_checked_in: boolean
   created_at: string
   updated_at: string
 }
@@ -60,64 +61,21 @@ let currentMeetingId: string | null = null
 
 export const setCurrentMeetingId = (meetingId: string) => {
   currentMeetingId = meetingId
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('currentMeetingId', meetingId)
-  }
 }
 
 export const getCurrentMeetingId = (): string | null => {
-  if (currentMeetingId) return currentMeetingId
-  
-  if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('currentMeetingId')
-    if (stored) {
-      currentMeetingId = stored
-      return stored
-    }
-    
-    // 개발 모드(Supabase 미설정)에서 임시 모임 ID 자동 생성
-    if (!isSupabaseConfigured) {
-      const tempMeetingId = `temp-meeting-${Date.now()}`
-      console.log('🔧 개발 모드: 임시 모임 ID 생성됨:', tempMeetingId)
-      setCurrentMeetingId(tempMeetingId)
-      return tempMeetingId
-    }
-  }
-  
-  return null
-}
-
-// 앱 시작 시 즉시 모임 ID 초기화하는 함수
-export const initializeMeetingId = (): string | null => {
-  if (typeof window === 'undefined') return null
-  
-  // 이미 설정된 모임 ID가 있으면 사용
-  const existingId = getCurrentMeetingId()
-  if (existingId) return existingId
-  
-  // 개발 모드에서는 즉시 임시 모임 ID 생성
-  if (!isSupabaseConfigured) {
-    const tempMeetingId = `temp-meeting-${Date.now()}`
-    console.log('🔧 개발 모드: 앱 시작 시 임시 모임 ID 생성:', tempMeetingId)
-    setCurrentMeetingId(tempMeetingId)
-    return tempMeetingId
-  }
-  
-  return null
+  return currentMeetingId
 }
 
 export const clearCurrentMeetingId = () => {
   currentMeetingId = null
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('currentMeetingId')
-  }
 }
 
 // ===== 모임(Meeting) 관련 함수들 =====
 
 export const createMeeting = async (name: string, userId: string): Promise<Meeting | null> => {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase가 설정되지 않았습니다. localStorage 모드에서는 모임 생성이 불가능합니다.')
+    console.error('Supabase가 설정되지 않았습니다. 모임 생성이 불가능합니다.')
     return null
   }
 
@@ -130,7 +88,7 @@ export const createMeeting = async (name: string, userId: string): Promise<Meeti
       .insert({
         user_id: userId,
         name,
-        current_round: 0  // 아직 완료된 라운드가 없으므로 0으로 시작
+        current_round: 1
       })
       .select()
       .single()
@@ -145,7 +103,11 @@ export const createMeeting = async (name: string, userId: string): Promise<Meeti
   }
 }
 
-export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
+export const getUserMeetings = async (
+  userId: string, 
+  sortBy: 'name' | 'created_at' | 'updated_at' = 'updated_at',
+  sortOrder: 'asc' | 'desc' = 'desc'
+): Promise<Meeting[]> => {
   const supabase = createSupabaseClient()
   if (!supabase) return []
   
@@ -154,7 +116,7 @@ export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
       .from('meetings')
       .select('*')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
+      .order(sortBy, { ascending: sortOrder === 'asc' })
 
     if (error) throw error
     return data || []
@@ -165,29 +127,14 @@ export const getUserMeetings = async (userId: string): Promise<Meeting[]> => {
 }
 
 export const getCurrentMeeting = async (): Promise<Meeting | null> => {
-  const meetingId = getCurrentMeetingId()
-  if (!meetingId) return null
-  
-  // Supabase가 설정되지 않은 경우 (개발 모드)
-  if (!isSupabaseConfigured) {
-    return {
-      id: meetingId,
-      name: '로컬 모임',
-      user_id: 'local-user',
-      current_round: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-  }
-  
   const supabase = createSupabaseClient()
-  if (!supabase) return null
+  if (!supabase || !currentMeetingId) return null
   
   try {
     const { data, error } = await supabase
       .from('meetings')
       .select('*')
-      .eq('id', meetingId)
+      .eq('id', currentMeetingId)
       .single()
 
     if (error) throw error
@@ -219,61 +166,6 @@ export const updateMeetingRound = async (meetingId: string, round: number): Prom
   }
 }
 
-export const deleteMeeting = async (meetingId: string, userId: string): Promise<boolean> => {
-  const supabase = createSupabaseClient()
-  if (!supabase) return false
-  
-  try {
-    console.log('🗑️ 모임 삭제 시작:', meetingId)
-    
-    // 해당 모임이 사용자 소유인지 확인
-    const { data: meeting, error: fetchError } = await supabase
-      .from('meetings')
-      .select('user_id')
-      .eq('id', meetingId)
-      .single()
-    
-    if (fetchError) throw fetchError
-    
-    if (meeting.user_id !== userId) {
-      console.error('❌ 권한 없음: 다른 사용자의 모임입니다')
-      return false
-    }
-    
-    // 관련 데이터들을 순서대로 삭제 (FK 제약 조건 고려)
-    console.log('🗑️ 스냅샷 삭제 중...')
-    await supabase.from('snapshots').delete().eq('meeting_id', meetingId)
-    
-    console.log('🗑️ 참가자 삭제 중...')
-    await supabase.from('participants').delete().eq('meeting_id', meetingId)
-    
-    console.log('🗑️ 그룹 배치 결과 삭제 중...')
-    await supabase.from('grouping_results').delete().eq('meeting_id', meetingId)
-    
-    console.log('🗑️ 그룹 설정 삭제 중...')
-    await supabase.from('group_settings').delete().eq('meeting_id', meetingId)
-    
-    console.log('🗑️ 이탈 참가자 삭제 중...')
-    await supabase.from('exited_participants').delete().eq('meeting_id', meetingId)
-    
-    // 마지막으로 모임 자체 삭제
-    console.log('🗑️ 모임 삭제 중...')
-    const { error: deleteError } = await supabase
-      .from('meetings')
-      .delete()
-      .eq('id', meetingId)
-      .eq('user_id', userId) // 이중 보안
-    
-    if (deleteError) throw deleteError
-    
-    console.log('✅ 모임 삭제 완료:', meetingId)
-    return true
-  } catch (error) {
-    console.error('❌ 모임 삭제 중 오류:', error)
-    return false
-  }
-}
-
 // ===== 참가자(Participants) 관련 함수들 =====
 
 export const saveParticipants = async (participants: Participant[]): Promise<boolean> => {
@@ -300,14 +192,38 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
         mbti: p.mbti,
         meetings_by_round: p.meetingsByRound,
         all_met_people: p.allMetPeople,
-        group_history: p.groupHistory
+        group_history: p.groupHistory,
+        is_checked_in: p.isCheckedIn || false
       }))
 
       const { error } = await supabase
         .from('participants')
         .insert(dbParticipants)
 
-      if (error) throw error
+      if (error) {
+        // is_checked_in 컬럼이 없는 경우 해당 필드를 제외하고 다시 시도
+        if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+          console.warn('⚠️ is_checked_in 컬럼이 없습니다. 컬럼 없이 저장을 시도합니다.')
+          const dbParticipantsWithoutCheckIn = participants.map(p => ({
+            id: p.id,
+            meeting_id: meetingId,
+            name: p.name,
+            gender: p.gender,
+            mbti: p.mbti,
+            meetings_by_round: p.meetingsByRound,
+            all_met_people: p.allMetPeople,
+            group_history: p.groupHistory
+          }))
+          
+          const { error: retryError } = await supabase
+            .from('participants')
+            .insert(dbParticipantsWithoutCheckIn)
+          
+          if (retryError) throw retryError
+        } else {
+          throw error
+        }
+      }
     }
 
     return true
@@ -339,7 +255,8 @@ export const getParticipants = async (): Promise<Participant[]> => {
       mbti: p.mbti,
       meetingsByRound: p.meetings_by_round || {},
       allMetPeople: p.all_met_people || [],
-      groupHistory: p.group_history || []
+      groupHistory: p.group_history || [],
+      isCheckedIn: p.is_checked_in !== undefined ? p.is_checked_in : false
     }))
   } catch (error) {
     console.error('참가자 조회 중 오류:', error)
@@ -347,7 +264,318 @@ export const getParticipants = async (): Promise<Participant[]> => {
   }
 }
 
+// 참가자 체크인 상태 업데이트
+export const updateParticipantCheckIn = async (participantId: string, isCheckedIn: boolean): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) {
+    console.error('❌ 체크인 업데이트 실패: 활성 모임 ID가 없습니다')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) {
+    console.error('❌ 체크인 업데이트 실패: Supabase 클라이언트가 없습니다')
+    return false
+  }
+  
+  try {
+    console.log('📝 체크인 상태 업데이트 시도:', { participantId, isCheckedIn, meetingId })
+    
+    const { data, error } = await supabase
+      .from('participants')
+      .update({ is_checked_in: isCheckedIn })
+      .eq('meeting_id', meetingId)
+      .eq('id', participantId)
+      .select()
+
+    if (error) {
+      console.error('❌ Supabase 업데이트 에러:', error)
+      
+      // 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+        console.warn('⚠️ is_checked_in 컬럼이 없습니다. 로컬 상태로만 관리합니다.')
+        return true // 로컬에서만 작동하도록 성공으로 처리
+      }
+      
+      throw error
+    }
+    
+    console.log('✅ 체크인 상태 업데이트 성공:', data)
+    return true
+  } catch (error) {
+    console.error('❌ 참가자 체크인 상태 업데이트 중 오류:', error)
+    return false
+  }
+}
+
+// 모든 참가자 체크인 상태 초기화
+export const resetAllCheckInStatus = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    const { error } = await supabase
+      .from('participants')
+      .update({ is_checked_in: false })
+      .eq('meeting_id', meetingId)
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('체크인 상태 초기화 중 오류:', error)
+    return false
+  }
+}
+
+// 체크인 상태만 조회하는 함수 (폴링용)
+export const getCheckInStatuses = async (): Promise<{[participantId: string]: boolean}> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return {}
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return {}
+  
+  try {
+    const { data, error } = await supabase
+      .from('participants')
+      .select('id, is_checked_in')
+      .eq('meeting_id', meetingId)
+
+    if (error) {
+      // is_checked_in 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('is_checked_in')) {
+        console.warn('⚠️ is_checked_in 컬럼이 없습니다. 빈 상태를 반환합니다.')
+        return {}
+      }
+      throw error
+    }
+
+    const checkInStatuses: {[participantId: string]: boolean} = {}
+    data?.forEach(p => {
+      checkInStatuses[p.id] = p.is_checked_in || false
+    })
+    
+    return checkInStatuses
+  } catch (error) {
+    console.error('체크인 상태 조회 중 오류:', error)
+    return {}
+  }
+}
+
+// 테이블 레이아웃 이미지 업로드
+export const uploadTableLayout = async (file: File): Promise<string | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) {
+    console.error('❌ 테이블 레이아웃 업로드 실패: 활성 모임 ID가 없습니다')
+    return null
+  }
+
+  const supabase = createSupabaseClient()
+  if (!supabase) {
+    console.error('❌ 테이블 레이아웃 업로드 실패: Supabase 클라이언트가 없습니다')
+    return null
+  }
+
+  try {
+    // 파일명 생성 (모임ID + 타임스탬프)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `table-layout-${meetingId}-${Date.now()}.${fileExt}`
+    const filePath = `table-layouts/${fileName}`
+
+    console.log('📤 테이블 레이아웃 업로드 시작:', { fileName, fileSize: file.size })
+
+    // Supabase Storage에 업로드
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('table-layouts')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (uploadError) {
+      console.error('❌ Supabase Storage 업로드 오류:', uploadError)
+      return null
+    }
+
+    // 공개 URL 생성
+    const { data: urlData } = supabase.storage
+      .from('table-layouts')
+      .getPublicUrl(filePath)
+
+    if (!urlData?.publicUrl) {
+      console.error('❌ 공개 URL 생성 실패')
+      return null
+    }
+
+    // meetings 테이블에 URL 저장
+    const { error: updateError } = await supabase
+      .from('meetings')
+      .update({ table_layout_url: urlData.publicUrl })
+      .eq('id', meetingId)
+
+    if (updateError) {
+      console.error('❌ meetings 테이블 업데이트 오류:', updateError)
+      // 업로드된 파일 삭제
+      await supabase.storage.from('table-layouts').remove([filePath])
+      return null
+    }
+
+    console.log('✅ 테이블 레이아웃 업로드 완료:', urlData.publicUrl)
+    return urlData.publicUrl
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 업로드 중 오류:', error)
+    return null
+  }
+}
+
+// 테이블 레이아웃 이미지 삭제
+export const deleteTableLayout = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+
+  try {
+    // 현재 이미지 URL 조회
+    const { data: meetingData } = await supabase
+      .from('meetings')
+      .select('table_layout_url')
+      .eq('id', meetingId)
+      .single()
+
+    if (!meetingData?.table_layout_url) {
+      console.log('삭제할 테이블 레이아웃 이미지가 없습니다.')
+      return true
+    }
+
+    // URL에서 파일 경로 추출
+    const url = meetingData.table_layout_url
+    const filePath = url.split('/table-layouts/')[1]
+
+    if (filePath) {
+      // Storage에서 파일 삭제
+      const { error: deleteError } = await supabase.storage
+        .from('table-layouts')
+        .remove([`table-layouts/${filePath}`])
+
+      if (deleteError) {
+        console.error('❌ Storage 파일 삭제 오류:', deleteError)
+      } else {
+        console.log('✅ Storage 파일 삭제 완료')
+      }
+    }
+
+    // meetings 테이블에서 URL 제거
+    const { error: updateError } = await supabase
+      .from('meetings')
+      .update({ table_layout_url: null })
+      .eq('id', meetingId)
+
+    if (updateError) {
+      console.error('❌ meetings 테이블 업데이트 오류:', updateError)
+      return false
+    }
+
+    console.log('✅ 테이블 레이아웃 삭제 완료')
+    return true
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 삭제 중 오류:', error)
+    return false
+  }
+}
+
+// 테이블 레이아웃 이미지 URL 조회
+export const getTableLayoutUrl = async (): Promise<string | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return null
+
+  const supabase = createSupabaseClient()
+  if (!supabase) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('meetings')
+      .select('table_layout_url')
+      .eq('id', meetingId)
+      .single()
+
+    if (error) {
+      // table_layout_url 컬럼이 없는 경우 처리
+      if (error.message?.includes('column') && error.message?.includes('table_layout_url')) {
+        console.warn('⚠️ table_layout_url 컬럼이 없습니다. null을 반환합니다.')
+        return null
+      }
+      console.error('❌ 테이블 레이아웃 URL 조회 오류:', error)
+      return null
+    }
+
+    return data?.table_layout_url || null
+  } catch (error) {
+    console.error('❌ 테이블 레이아웃 URL 조회 중 오류:', error)
+    return null
+  }
+}
+
+// 데이터베이스 테이블 구조 확인용 (디버깅)
+export const checkTableStructure = async (): Promise<void> => {
+  const supabase = createSupabaseClient()
+  if (!supabase) return
+  
+  try {
+    console.log('📋 participants 테이블 구조 확인 중...')
+    
+    // 첫 번째 참가자 데이터를 가져와서 구조 확인
+    const { data, error } = await supabase
+      .from('participants')
+      .select('*')
+      .limit(1)
+
+    if (error) {
+      console.error('❌ 테이블 구조 확인 중 오류:', error)
+    } else {
+      console.log('📋 participants 테이블 샘플 데이터:', data)
+      if (data && data.length > 0) {
+        console.log('📋 테이블 컬럼들:', Object.keys(data[0]))
+      }
+    }
+  } catch (error) {
+    console.error('❌ 테이블 구조 확인 중 예외:', error)
+  }
+}
+
 // ===== 그룹 배치 결과(GroupingResult) 관련 함수들 =====
+
+export const clearGroupingResult = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 그룹핑 결과 삭제 중...')
+    
+    const { error } = await supabase
+      .from('grouping_results')
+      .delete()
+      .eq('meeting_id', meetingId)
+
+    if (error) {
+      console.error('❌ 그룹핑 결과 삭제 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 그룹핑 결과 삭제 완료')
+    return true
+  } catch (error) {
+    console.error('❌ 그룹핑 결과 삭제 중 오류:', error)
+    return false
+  }
+}
 
 export const saveGroupingResult = async (result: GroupingResult): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()
@@ -395,18 +623,83 @@ export const getGroupingResult = async (): Promise<GroupingResult | null> => {
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
 
     if (error) throw error
 
+    // 데이터가 없으면 null 반환 (그룹 배치가 아직 안 된 경우)
+    if (!data || data.length === 0) {
+      console.log('그룹 배치 결과가 없습니다.')
+      return null
+    }
+
+    const result = data[0]
     return {
-      groups: data.groups,
-      round: data.round,
-      summary: data.summary
+      groups: result.groups,
+      round: result.round,
+      summary: result.summary
     }
   } catch (error) {
     console.error('그룹 배치 결과 조회 중 오류:', error)
     return null
+  }
+}
+
+// 특정 라운드의 그룹 배치 결과 조회
+export const getGroupingResultByRound = async (round: number): Promise<GroupingResult | null> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return null
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return null
+  
+  try {
+    const { data, error } = await supabase
+      .from('grouping_results')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .eq('round', round)
+      .limit(1)
+
+    if (error) throw error
+
+    if (!data || data.length === 0) {
+      console.log(`${round}라운드 그룹 배치 결과가 없습니다.`)
+      return null
+    }
+
+    const result = data[0]
+    return {
+      groups: result.groups,
+      round: result.round,
+      summary: result.summary
+    }
+  } catch (error) {
+    console.error(`${round}라운드 그룹 배치 결과 조회 중 오류:`, error)
+    return null
+  }
+}
+
+// 모든 라운드 목록 조회
+export const getAllRounds = async (): Promise<number[]> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return []
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return []
+  
+  try {
+    const { data, error } = await supabase
+      .from('grouping_results')
+      .select('round')
+      .eq('meeting_id', meetingId)
+      .order('round', { ascending: true })
+
+    if (error) throw error
+
+    return (data || []).map(item => item.round).filter((round, index, self) => self.indexOf(round) === index)
+  } catch (error) {
+    console.error('라운드 목록 조회 중 오류:', error)
+    return []
   }
 }
 
@@ -486,6 +779,8 @@ export const saveGroupSettings = async (settings: {
   groupSize: number
   numGroups: number
   customGroupSizes: number[]
+  customGroupGenders: {maleCount: number, femaleCount: number}[]
+  enableGenderRatio: boolean
 }): Promise<boolean> => {
   const meetingId = getCurrentMeetingId()
   if (!meetingId) return false
@@ -500,7 +795,7 @@ export const saveGroupSettings = async (settings: {
       .delete()
       .eq('meeting_id', meetingId)
 
-    // 새 설정 저장
+    // 모든 설정을 한 번에 저장 (스키마에 성비 컬럼이 이미 존재함)
     const { error } = await supabase
       .from('group_settings')
       .insert({
@@ -508,7 +803,9 @@ export const saveGroupSettings = async (settings: {
         grouping_mode: settings.groupingMode,
         group_size: settings.groupSize,
         num_groups: settings.numGroups,
-        custom_group_sizes: settings.customGroupSizes
+        custom_group_sizes: settings.customGroupSizes,
+        custom_group_genders: settings.customGroupGenders || [],
+        enable_gender_ratio: settings.enableGenderRatio || false
       })
 
     if (error) throw error
@@ -524,6 +821,8 @@ export const getGroupSettings = async (): Promise<{
   groupSize: number
   numGroups: number
   customGroupSizes: number[]
+  customGroupGenders: {maleCount: number, femaleCount: number}[]
+  enableGenderRatio: boolean
 } | null> => {
   const meetingId = getCurrentMeetingId()
   if (!meetingId) return null
@@ -538,15 +837,35 @@ export const getGroupSettings = async (): Promise<{
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single()
 
     if (error) throw error
 
+    // 데이터가 없으면 null 반환 (새로운 모임의 경우)
+    if (!data || data.length === 0) {
+      console.log('그룹 설정이 없습니다. 기본값을 사용합니다.')
+      return null
+    }
+
+    const settings = data[0]
+    
+    // customGroupGenders가 없는 경우 customGroupSizes 기반으로 기본값 생성
+    let customGroupGenders = settings.custom_group_genders
+    if (!customGroupGenders || customGroupGenders.length === 0) {
+      const groupSizes = settings.custom_group_sizes || []
+      customGroupGenders = groupSizes.map((size: number) => {
+        const maleCount = Math.ceil(size * 0.6) // 60% 남성
+        const femaleCount = size - maleCount
+        return { maleCount, femaleCount }
+      })
+    }
+    
     return {
-      groupingMode: data.grouping_mode,
-      groupSize: data.group_size,
-      numGroups: data.num_groups,
-      customGroupSizes: data.custom_group_sizes
+      groupingMode: settings.grouping_mode,
+      groupSize: settings.group_size,
+      numGroups: settings.num_groups,
+      customGroupSizes: settings.custom_group_sizes,
+      customGroupGenders,
+      enableGenderRatio: settings.enable_gender_ratio || false
     }
   } catch (error) {
     console.error('그룹 설정 조회 중 오류:', error)
@@ -631,13 +950,48 @@ export const restoreFromSnapshot = async (snapshotId: number): Promise<any | nul
       .select('*')
       .eq('meeting_id', meetingId)
       .eq('snapshot_id', snapshotId)
-      .single()
+      .limit(1)
 
     if (error) throw error
-    return data.data
+    
+    if (!data || data.length === 0) {
+      console.log('해당 스냅샷을 찾을 수 없습니다:', snapshotId)
+      return null
+    }
+    
+    return data[0].data
   } catch (error) {
     console.error('스냅샷 복원 중 오류:', error)
     return null
+  }
+}
+
+export const deleteSnapshot = async (snapshotId: number): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return false
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 스냅샷 삭제 시작:', snapshotId)
+    
+    const { error } = await supabase
+      .from('snapshots')
+      .delete()
+      .eq('meeting_id', meetingId)
+      .eq('snapshot_id', snapshotId)
+
+    if (error) {
+      console.error('❌ 스냅샷 삭제 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 스냅샷 삭제 성공:', snapshotId)
+    return true
+  } catch (error) {
+    console.error('❌ 스냅샷 삭제 중 오류:', error)
+    return false
   }
 }
 
@@ -655,4 +1009,127 @@ export const startNewMeeting = async (name: string, userId: string): Promise<str
 export const selectMeeting = async (meetingId: string): Promise<boolean> => {
   setCurrentMeetingId(meetingId)
   return true
+}
+
+// 모임 완전 삭제 (모든 관련 데이터 포함)
+export const deleteMeeting = async (meetingId: string): Promise<boolean> => {
+  if (!isSupabaseConfigured) {
+    console.error('Supabase가 설정되지 않았습니다. 모임 삭제가 불가능합니다.')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    console.log('🗑️ 모임 삭제 시작:', meetingId)
+    
+    // 모든 관련 데이터 삭제 (스냅샷 포함)
+    const deletePromises = [
+      supabase.from('participants').delete().eq('meeting_id', meetingId),
+      supabase.from('grouping_results').delete().eq('meeting_id', meetingId),
+      supabase.from('group_settings').delete().eq('meeting_id', meetingId),
+      supabase.from('exited_participants').delete().eq('meeting_id', meetingId),
+      supabase.from('snapshots').delete().eq('meeting_id', meetingId),
+      // 마지막으로 모임 자체 삭제
+      supabase.from('meetings').delete().eq('id', meetingId)
+    ]
+    
+    const results = await Promise.all(deletePromises)
+    
+    // 삭제 결과 확인
+    for (const result of results) {
+      if (result.error) {
+        console.error('❌ 모임 삭제 중 일부 오류:', result.error)
+        throw result.error
+      }
+    }
+    
+    // 삭제된 모임이 현재 선택된 모임이면 초기화
+    if (getCurrentMeetingId() === meetingId) {
+      clearCurrentMeetingId()
+    }
+    
+    console.log('✅ 모임 삭제 완료:', meetingId)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 삭제 중 오류:', error)
+    return false
+  }
+}
+
+// 모임 이름 업데이트
+export const updateMeetingName = async (meetingId: string, newName: string): Promise<boolean> => {
+  if (!isSupabaseConfigured) {
+    console.error('Supabase가 설정되지 않았습니다. 모임 이름 변경이 불가능합니다.')
+    return false
+  }
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  if (!newName.trim()) {
+    console.error('모임 이름이 비어있습니다.')
+    return false
+  }
+  
+  try {
+    console.log('✏️ 모임 이름 변경 시작:', { meetingId, newName })
+    
+    const { error } = await supabase
+      .from('meetings')
+      .update({ 
+        name: newName.trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', meetingId)
+    
+    if (error) {
+      console.error('❌ 모임 이름 변경 실패:', error)
+      throw error
+    }
+    
+    console.log('✅ 모임 이름 변경 완료:', newName)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 이름 변경 중 오류:', error)
+    return false
+  }
+}
+
+// 현재 모임의 모든 데이터 삭제 (새로운 모임 시작 시 사용)
+export const clearCurrentMeetingData = async (): Promise<boolean> => {
+  const meetingId = getCurrentMeetingId()
+  if (!meetingId) return true // 활성 모임이 없으면 성공으로 처리
+  
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    // 참가자, 그룹핑 결과, 그룹 설정, 퇴장 참가자 데이터 삭제 (스냅샷은 백업으로 보존)
+    const deletePromises = [
+      supabase.from('participants').delete().eq('meeting_id', meetingId),
+      supabase.from('grouping_results').delete().eq('meeting_id', meetingId),
+      supabase.from('group_settings').delete().eq('meeting_id', meetingId),
+      supabase.from('exited_participants').delete().eq('meeting_id', meetingId),
+      // 모임의 라운드도 1로 리셋
+      supabase.from('meetings').update({ current_round: 1 }).eq('id', meetingId)
+    ]
+    
+    const results = await Promise.all(deletePromises)
+    
+    // 삭제 결과 확인
+    for (const result of results) {
+      if (result.error) {
+        console.error('❌ 데이터 삭제 중 일부 오류:', result.error)
+        throw result.error
+      }
+    }
+    
+    console.log('✅ 모임 데이터 삭제 완료:', meetingId)
+    return true
+  } catch (error) {
+    console.error('❌ 모임 데이터 삭제 중 오류:', error)
+    return false
+  }
 } 

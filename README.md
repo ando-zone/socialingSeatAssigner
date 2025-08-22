@@ -12,7 +12,7 @@
 
 ## 🌐 라이브 데모
 
-**배포된 서비스**: [https://dohyeonan.github.io/socialingSeatAssigner/](https://dohyeonan.github.io/socialingSeatAssigner/)
+**배포된 서비스**: [https://ando-zone.github.io/socialingSeatAssigner/](https://ando-zone.github.io/socialingSeatAssigner/)
 
 ## 📁 프로젝트 구조
 

@@ -4,6 +4,7 @@ create table public.meetings (
   user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   current_round integer default 1 not null,
+  table_layout_url text null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -18,6 +19,7 @@ create table public.participants (
   meetings_by_round jsonb default '{}' not null,
   all_met_people text[] default array[]::text[] not null,
   group_history integer[] default array[]::integer[] not null,
+  is_checked_in boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -51,6 +53,8 @@ create table public.group_settings (
   group_size integer default 4 not null,
   num_groups integer default 6 not null,
   custom_group_sizes integer[] default array[]::integer[] not null,
+  custom_group_genders jsonb default '[]'::jsonb not null,
+  enable_gender_ratio boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -266,4 +270,29 @@ create trigger set_updated_at_grouping_results
 
 create trigger set_updated_at_group_settings
   before update on public.group_settings
-  for each row execute function public.handle_updated_at(); 
+  for each row execute function public.handle_updated_at();
+
+-- 기존 participants 테이블에 is_checked_in 컬럼 추가 (마이그레이션)
+-- 이미 존재하는 경우 에러를 무시하고 계속 진행
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'participants' 
+        AND column_name = 'is_checked_in'
+    ) THEN
+        ALTER TABLE public.participants ADD COLUMN is_checked_in boolean DEFAULT false NOT NULL;
+    END IF;
+END $$;
+
+-- 기존 meetings 테이블에 table_layout_url 컬럼 추가 (마이그레이션)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'meetings' 
+        AND column_name = 'table_layout_url'
+    ) THEN
+        ALTER TABLE public.meetings ADD COLUMN table_layout_url text NULL;
+    END IF;
+END $$; 
