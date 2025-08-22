@@ -41,6 +41,9 @@ export function useResultPage() {
   const [swapMessage, setSwapMessage] = useState<string | null>(null)
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
   const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)
+  
+  // Broadcast 채널 인스턴스를 저장
+  const [broadcastChannel, setBroadcastChannel] = useState<any>(null)
 
   // Initial data loading
   const loadData = useCallback(async () => {
@@ -115,48 +118,95 @@ export function useResultPage() {
     loadData()
   }, [loadData])
 
-  // 폴링 방식으로 체크인 상태 동기화
+  // Supabase Broadcast로 실시간 체크인 상태 동기화
   useEffect(() => {
     if (!result) return
 
-    console.log('🔄 체크인 상태 폴링 시작 (1초마다 체크)')
-    
-    const pollCheckInStatus = async () => {
+    const setupBroadcast = async () => {
       try {
-        const { getCheckInStatuses } = await import('@/utils/database')
-        const latestStatuses = await getCheckInStatuses()
+        const { getCurrentMeetingId } = await import('@/utils/database')
+        const { createSupabaseClient } = await import('@/lib/supabase')
+        const supabase = createSupabaseClient()
+        const meetingId = getCurrentMeetingId()
         
-        // 현재 상태와 비교하여 변경된 부분만 업데이트
-        setCheckInStatus(prevStatuses => {
-          let hasChanges = false
-          const updatedStatuses = { ...prevStatuses }
-          
-          Object.entries(latestStatuses).forEach(([participantId, isChecked]) => {
-            if (prevStatuses[participantId] !== isChecked) {
-              hasChanges = true
-              updatedStatuses[participantId] = isChecked
+        if (!supabase || !meetingId) {
+          console.log('Supabase 또는 모임 ID가 없어서 브로드캐스트를 설정하지 않습니다.')
+          return
+        }
+
+        const channelName = `checkin-${meetingId}`
+        console.log('📡 Supabase Broadcast 채널 구독 시작:', channelName)
+        console.log('🔍 사용자 정보:', { meetingId, participantCount: participants.length })
+        
+        const channel = supabase
+          .channel(channelName)
+          .on('broadcast', { event: 'checkin-update' }, (payload: any) => {
+            console.log('🎯 [수신] 체크인 업데이트 브로드캐스트:', {
+              전체_payload: payload,
+              event: payload.event,
+              payload_내용: payload.payload
+            })
+            
+            if (payload.payload && payload.payload.participantId !== undefined && payload.payload.isChecked !== undefined) {
+              const { participantId, isChecked } = payload.payload
+              
+              setCheckInStatus(prev => {
+                console.log('🔄 체크인 상태 업데이트:', { 
+                  participantId, 
+                  기존: prev[participantId], 
+                  새로운값: isChecked 
+                })
+                return {
+                  ...prev,
+                  [participantId]: isChecked
+                }
+              })
               
               const participantName = participants.find(p => p.id === participantId)?.name
-              console.log(`🔄 ${participantName}의 체크인 상태가 ${isChecked ? '체크됨' : '해제됨'}으로 동기화됨`)
+              console.log(`✅ ${participantName}의 체크인 상태가 ${isChecked ? '체크됨' : '해제됨'}으로 실시간 동기화됨`)
+            } else {
+              console.warn('⚠️ 브로드캐스트 페이로드 구조가 예상과 다름:', payload)
             }
           })
-          
-          return hasChanges ? updatedStatuses : prevStatuses
-        })
+          .on('broadcast', { event: 'checkin-reset-all' }, (payload: any) => {
+            console.log('🎯 [수신] 전체 초기화 브로드캐스트:', payload)
+            
+            if (payload.payload && payload.payload.resetAll) {
+              const resetStatus: {[participantId: string]: boolean} = {}
+              participants.forEach(p => {
+                resetStatus[p.id] = false
+              })
+              setCheckInStatus(resetStatus)
+              
+              console.log('✅ 전체 체크인 상태가 초기화됨')
+            }
+          })
+          .subscribe((status) => {
+            console.log('📡 Broadcast 채널 상태 변경:', { status, channelName })
+            if (status === 'SUBSCRIBED') {
+              console.log('✅ Broadcast 채널 구독 성공!', channelName)
+              setBroadcastChannel(channel) // 채널 인스턴스 저장
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('❌ Broadcast 채널 오류:', channelName)
+            } else if (status === 'TIMED_OUT') {
+              console.error('❌ Broadcast 채널 타임아웃:', channelName)
+            }
+          })
+
+        return () => {
+          console.log('📡 Broadcast 채널 구독 해제')
+          setBroadcastChannel(null)
+          channel.unsubscribe()
+        }
       } catch (error) {
-        console.error('❌ 체크인 상태 폴링 중 오류:', error)
+        console.error('❌ Broadcast 설정 중 오류:', error)
       }
     }
 
-    // 초기 로드
-    pollCheckInStatus()
-    
-    // 1초마다 폴링
-    const interval = setInterval(pollCheckInStatus, 1000)
+    const cleanup = setupBroadcast()
     
     return () => {
-      console.log('🔄 체크인 상태 폴링 정리')
-      clearInterval(interval)
+      cleanup?.then(cleanupFn => cleanupFn?.())
     }
   }, [result, participants])
 
@@ -200,21 +250,49 @@ export function useResultPage() {
     setGroupsRoundResult(null)
   }, [])
 
-  // Check-in functions
+  // Check-in functions with DB + Broadcast
   const toggleCheckIn = useCallback(async (participantId: string) => {
     try {
       const currentStatus = checkInStatus[participantId] || false
       const newStatus = !currentStatus
       
+      // 1. 즉시 로컬 상태 업데이트 (낙관적 업데이트)
       setCheckInStatus(prev => ({
         ...prev,
         [participantId]: newStatus
       }))
       
-      const { updateParticipantCheckIn } = await import('@/utils/database')
+      // 2. DB에 저장
+      const { updateParticipantCheckIn, getCurrentMeetingId } = await import('@/utils/database')
       const success = await updateParticipantCheckIn(participantId, newStatus)
       
-      if (!success) {
+      if (success) {
+        // 3. 브로드캐스트로 다른 사용자들에게 알림
+        try {
+          if (broadcastChannel) {
+            const broadcastData = {
+              type: 'broadcast',
+              event: 'checkin-update',
+              payload: {
+                participantId,
+                isChecked: newStatus
+              }
+            }
+            
+            console.log('📤 [전송] 저장된 채널로 브로드캐스트 전송 시작:', { broadcastData })
+            
+            const sendResult = await broadcastChannel.send(broadcastData)
+            
+            const participantName = participants.find(p => p.id === participantId)?.name
+            console.log(`📤 [전송] ${participantName}의 체크인 브로드캐스트 전송 결과:`, sendResult)
+          } else {
+            console.warn('⚠️ 브로드캐스트 채널이 아직 준비되지 않음')
+          }
+        } catch (broadcastError) {
+          console.error('❌ 브로드캐스트 전송 실패:', broadcastError)
+        }
+      } else {
+        // DB 저장 실패 시 로컬 상태 되돌리기
         setCheckInStatus(prev => ({
           ...prev,
           [participantId]: currentStatus
@@ -225,20 +303,42 @@ export function useResultPage() {
       }
     } catch (error) {
       console.error('체크인 상태 업데이트 실패:', error)
+      
+      // 오류 발생 시 로컬 상태 되돌리기
+      setCheckInStatus(prev => ({
+        ...prev,
+        [participantId]: checkInStatus[participantId] || false
+      }))
     }
   }, [checkInStatus, participants])
 
   const resetAllCheckIn = useCallback(async () => {
     try {
-      const { resetAllCheckInStatus } = await import('@/utils/database')
+      const { resetAllCheckInStatus, getCurrentMeetingId } = await import('@/utils/database')
       const success = await resetAllCheckInStatus()
       
       if (success) {
+        // 로컬 상태 초기화
         const resetStatus: {[participantId: string]: boolean} = {}
         participants.forEach(p => {
           resetStatus[p.id] = false
         })
         setCheckInStatus(resetStatus)
+        
+        // 전체 초기화 브로드캐스트
+        try {
+          if (broadcastChannel) {
+            await broadcastChannel.send({
+              type: 'broadcast',
+              event: 'checkin-reset-all',
+              payload: { resetAll: true }
+            })
+            
+            console.log('📡 전체 체크인 초기화 브로드캐스트 전송 완료')
+          }
+        } catch (broadcastError) {
+          console.error('브로드캐스트 전송 실패:', broadcastError)
+        }
       }
     } catch (error) {
       console.error('전체 체크인 초기화 실패:', error)
