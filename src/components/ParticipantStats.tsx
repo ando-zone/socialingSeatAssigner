@@ -603,6 +603,7 @@ export default function ParticipantStats({
                 {(() => {
                   const meetingsByRound = getParticipantMeetingsByRound(selectedParticipant)
                   const rounds = Object.keys(meetingsByRound).map(Number).sort((a, b) => b - a) // 최신 라운드부터
+                  const fullParticipant = participants.find(p => p.id === selectedParticipant.id)
 
                   if (rounds.length === 0) {
                     return (
@@ -615,6 +616,8 @@ export default function ParticipantStats({
                   return rounds.map(round => {
                     const meetings = meetingsByRound[round]
                     const isCurrentRound = round === result.round
+                    // 해당 라운드에서의 그룹 번호 가져오기
+                    const groupNumber = fullParticipant?.groupHistory?.[round - 1] // 0-based index
                     
                     return (
                       <div key={round} className={`border rounded-lg p-4 ${
@@ -624,7 +627,7 @@ export default function ParticipantStats({
                           <h5 className={`font-semibold ${
                             isCurrentRound ? 'text-blue-800' : 'text-gray-700'
                           }`}>
-                            {round}라운드 {isCurrentRound && '(현재)'}
+                            {round}라운드 {groupNumber ? `(그룹 ${groupNumber})` : ''} {isCurrentRound && '(현재)'}
                           </h5>
                           <span className={`text-sm px-2 py-1 rounded-full ${
                             isCurrentRound 
