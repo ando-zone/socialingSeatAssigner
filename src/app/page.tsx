@@ -284,17 +284,6 @@ export default function Home() {
       const result = createOptimalGroups(participants, groupSizeParam, currentRound, genderConstraints)
       const updatedParticipants = updateMeetingHistory(participants, result.groups, currentRound)
       
-      // result.groups의 멤버들도 업데이트된 참가자 정보로 교체
-      const updatedResult = {
-        ...result,
-        groups: result.groups.map(group => ({
-          ...group,
-          members: group.members.map(member => 
-            updatedParticipants.find(p => p.id === member.id) || member
-          )
-        }))
-      }
-      
       const nextRound = currentRound + 1
       
       // Supabase 저장
@@ -304,12 +293,12 @@ export default function Home() {
       if (meetingId) {
         await Promise.all([
           saveParticipants(updatedParticipants),
-          saveGroupingResult(updatedResult)
+          saveGroupingResult(result)
         ])
         console.log('✅ 그룹핑 결과 저장 완료')
         
         // 그룹 배치 후 스냅샷 생성
-        await createSnapshot('grouping', `${currentRound}라운드 그룹 배치 완료 (${updatedResult.groups.length}개 그룹)`)
+        await createSnapshot('grouping', `${currentRound}라운드 그룹 배치 완료 (${result.groups.length}개 그룹)`)
       }
       
       setParticipants(updatedParticipants)
