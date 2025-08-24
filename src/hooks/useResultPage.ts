@@ -313,19 +313,9 @@ export function useResultPage() {
   }, [checkInStatus, participants])
 
   const resetAllCheckIn = useCallback(async () => {
-    console.log('🔄 [시작] resetAllCheckIn 함수 호출됨')
-    console.log('📡 [확인] broadcastChannel 상태:', { 
-      exists: !!broadcastChannel, 
-      type: typeof broadcastChannel,
-      participantCount: participants.length 
-    })
-    
     try {
       const { resetAllCheckInStatus, getCurrentMeetingId } = await import('@/utils/database')
-      console.log('💾 [시작] DB에서 전체 체크인 상태 초기화 시도')
-      
       const success = await resetAllCheckInStatus()
-      console.log('💾 [결과] DB 초기화 결과:', success)
       
       if (success) {
         // 로컬 상태 초기화
@@ -334,34 +324,24 @@ export function useResultPage() {
           resetStatus[p.id] = false
         })
         setCheckInStatus(resetStatus)
-        console.log('✅ 로컬 상태 초기화 완료')
         
         // 전체 초기화 브로드캐스트
-        console.log('📡 [시작] 브로드캐스트 전송 시도')
         try {
           if (broadcastChannel) {
-            console.log('📡 [확인] 브로드캐스트 채널 존재함, 전송 시작')
-            
-            const broadcastData = {
+            await broadcastChannel.send({
               type: 'broadcast',
               event: 'checkin-reset-all',
               payload: { resetAll: true }
-            }
-            console.log('📤 [전송] 브로드캐스트 데이터:', broadcastData)
+            })
             
-            const sendResult = await broadcastChannel.send(broadcastData)
-            console.log('📡 [결과] 전체 체크인 초기화 브로드캐스트 전송 완료:', sendResult)
-          } else {
-            console.warn('⚠️ [경고] 브로드캐스트 채널이 null임 - 전송하지 않음')
+            console.log('📡 전체 체크인 초기화 브로드캐스트 전송 완료')
           }
         } catch (broadcastError) {
-          console.error('❌ [오류] 브로드캐스트 전송 실패:', broadcastError)
+          console.error('브로드캐스트 전송 실패:', broadcastError)
         }
-      } else {
-        console.error('❌ [오류] DB 초기화 실패로 브로드캐스트 전송하지 않음')
       }
     } catch (error) {
-      console.error('❌ [오류] 전체 체크인 초기화 실패:', error)
+      console.error('전체 체크인 초기화 실패:', error)
     }
   }, [participants, broadcastChannel])
 
