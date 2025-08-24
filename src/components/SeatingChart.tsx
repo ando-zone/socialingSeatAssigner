@@ -183,11 +183,6 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                             {isCheckedIn && <span className="mr-2">✅</span>}
                             {member.name}
                           </span>
-                          {isCheckedIn && (
-                            <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full font-medium">
-                              입장완료
-                            </span>
-                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -251,11 +246,6 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                             {isCheckedIn && <span className="mr-2">✅</span>}
                             {member.name}
                           </span>
-                          {isCheckedIn && (
-                            <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full font-medium">
-                              입장완료
-                            </span>
-                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <button
