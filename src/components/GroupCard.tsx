@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Participant } from '@/utils/grouping'
 
 interface GroupCardProps {
@@ -76,6 +76,53 @@ export default function GroupCard({
   getCurrentRoundMeetings,
   getPreviousRoundsMeetings
 }: GroupCardProps) {
+  // Long press를 위한 상태 관리
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null)
+  const [isLongPressing, setIsLongPressing] = useState(false)
+  const [longPressTarget, setLongPressTarget] = useState<string | null>(null)
+
+  // Long press 핸들러들
+  const handleTouchStart = (participantId: string, groupId: number) => {
+    if (isViewingPastRound || swapSelectedParticipant) return
+    
+    setIsLongPressing(false)
+    setLongPressTarget(participantId)
+    
+    longPressTimer.current = setTimeout(() => {
+      setIsLongPressing(true)
+      onParticipantClick(participantId, groupId)
+      // 햅틱 피드백 (iOS Safari에서 지원)
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    }, 500) // 500ms long press
+  }
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    setIsLongPressing(false)
+    setLongPressTarget(null)
+  }
+
+  const handleTouchCancel = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    setIsLongPressing(false)
+    setLongPressTarget(null)
+  }
+
+  const handleClick = (participantId: string, groupId: number, e: React.MouseEvent) => {
+    // Long press가 아닌 일반 클릭일 때만 실행
+    if (!isLongPressing && isMobile && !swapSelectedParticipant && !isViewingPastRound) {
+      onParticipantClick(participantId, groupId)
+    }
+  }
+
   // 성비 및 MBTI 비율 계산
   const maleCount = group.members.filter(m => m.gender === 'male').length
   const femaleCount = group.members.filter(m => m.gender === 'female').length
@@ -226,8 +273,11 @@ export default function GroupCard({
                     onDragStart={!isMobile && !swapSelectedParticipant && !isViewingPastRound ? () => onDragStart(member.id, group.id) : undefined}
                     onDragOver={!isMobile && !isViewingPastRound ? onDragOver : undefined}
                     onDrop={!isMobile && !isViewingPastRound ? () => onDrop(member.id, group.id) : undefined}
-                    onClick={isMobile && !swapSelectedParticipant && !isViewingPastRound ? () => onParticipantClick(member.id, group.id) : undefined}
-                    className={`flex-1 ${
+                    onClick={(e) => handleClick(member.id, group.id, e)}
+                    onTouchStart={isMobile ? () => handleTouchStart(member.id, group.id) : undefined}
+                    onTouchEnd={isMobile ? handleTouchEnd : undefined}
+                    onTouchCancel={isMobile ? handleTouchCancel : undefined}
+                    className={`flex-1 select-none ${
                       isViewingPastRound 
                         ? 'cursor-default' 
                         : !swapSelectedParticipant ? (isMobile ? 'cursor-pointer' : 'cursor-move') : 'cursor-default'
@@ -236,11 +286,12 @@ export default function GroupCard({
                       isViewingPastRound ? '과거 라운드 - 편집 불가' :
                       isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
                       isSwapTarget ? `${member.name}과 위치 바꾸기` :
-                      !swapSelectedParticipant && isMobile ? '터치해서 선택' :
+                      !swapSelectedParticipant && isMobile ? '길게 눌러서 선택, 일반 터치로 교체' :
                       '드래그해서 다른 사람과 위치 바꾸기'
                     }
                   >
-                    <div className={`p-2 rounded ${
+                    <div className={`p-2 rounded transition-all duration-200 ${
+                      longPressTarget === member.id ? 'bg-yellow-200 border-2 border-yellow-400 scale-105' :
                       isSelected ? 'bg-blue-200 border-2 border-blue-400' :
                       isSwapTarget ? 'bg-orange-200 border-2 border-orange-400' :
                       showCheckIn && isCheckedIn ? 'bg-green-100 border-l-4 border-green-500' :
