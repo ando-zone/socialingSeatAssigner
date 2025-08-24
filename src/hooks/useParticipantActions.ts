@@ -261,6 +261,15 @@ export function useParticipantActions({
 
       if (group1Index === -1 || group2Index === -1) return
 
+      // 같은 그룹 내에서는 SWAP 방지
+      if (group1Index === group2Index) {
+        setSwapMessage('같은 그룹 내에서는 위치를 바꿀 수 없습니다.')
+        setSelectedParticipant(null)
+        setSwapSelectedParticipant(null)
+        setTimeout(() => setSwapMessage(null), 3000)
+        return
+      }
+
       const updatedGroups = [...result.groups]
       
       // 참가자들의 그룹 히스토리와 미팅 히스토리 업데이트
