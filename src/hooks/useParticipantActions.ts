@@ -252,6 +252,13 @@ export function useParticipantActions({
       
       if (!participant1 || !participant2) return
 
+      console.log('SWAP 전 그룹 히스토리:', {
+        participant1: participant1.name,
+        groupHistory1: participant1.groupHistory,
+        participant2: participant2.name, 
+        groupHistory2: participant2.groupHistory
+      })
+
       // 각 참가자가 속한 그룹 찾기
       let group1Index = -1, group2Index = -1
       result.groups.forEach((group, index) => {
@@ -344,6 +351,13 @@ export function useParticipantActions({
       }
 
       const updatedResult = { ...result, groups: updatedGroups }
+      
+      console.log('SWAP 후 그룹 히스토리:', {
+        participant1: updatedParticipant1.name,
+        groupHistory1: updatedParticipant1.groupHistory,
+        participant2: updatedParticipant2.name,
+        groupHistory2: updatedParticipant2.groupHistory
+      })
       
       // participants 상태도 업데이트 (기존 participants에서 SWAP된 두 참가자만 업데이트)
       const updatedParticipants = participants.map(p => {
