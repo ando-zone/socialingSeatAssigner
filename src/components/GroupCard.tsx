@@ -82,8 +82,11 @@ export default function GroupCard({
   const [longPressTarget, setLongPressTarget] = useState<string | null>(null)
 
   // Long press 핸들러들
-  const handleTouchStart = (participantId: string, groupId: number) => {
+  const handleTouchStart = (participantId: string, groupId: number, e: React.TouchEvent) => {
     if (isViewingPastRound || swapSelectedParticipant) return
+    
+    // 기본 터치 동작 방지 (스크롤 등)
+    e.preventDefault()
     
     setIsLongPressing(false)
     setLongPressTarget(participantId)
@@ -93,21 +96,46 @@ export default function GroupCard({
       onParticipantClick(participantId, groupId)
       // 햅틱 피드백 (iOS Safari에서 지원)
       if (navigator.vibrate) {
-        navigator.vibrate(50)
+        navigator.vibrate([50])
+      } else if ('vibrate' in window.navigator) {
+        (window.navigator as any).vibrate(50)
       }
-    }, 500) // 500ms long press
+    }, 800) // 800ms로 늘림
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault()
+    
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
     }
+    
+    // Long press가 완료되지 않았다면 일반 클릭으로 처리
+    if (!isLongPressing && longPressTarget) {
+      const participantId = longPressTarget
+      const member = group.members.find(m => m.id === participantId)
+      if (member && isMobile && !swapSelectedParticipant && !isViewingPastRound) {
+        onParticipantClick(participantId, group.id)
+      }
+    }
+    
     setIsLongPressing(false)
     setLongPressTarget(null)
   }
 
-  const handleTouchCancel = () => {
+  const handleTouchMove = (e: React.TouchEvent) => {
+    // 터치가 이동하면 long press 취소
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    setLongPressTarget(null)
+  }
+
+  const handleTouchCancel = (e: React.TouchEvent) => {
+    e.preventDefault()
+    
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
@@ -273,15 +301,21 @@ export default function GroupCard({
                     onDragStart={!isMobile && !swapSelectedParticipant && !isViewingPastRound ? () => onDragStart(member.id, group.id) : undefined}
                     onDragOver={!isMobile && !isViewingPastRound ? onDragOver : undefined}
                     onDrop={!isMobile && !isViewingPastRound ? () => onDrop(member.id, group.id) : undefined}
-                    onClick={(e) => handleClick(member.id, group.id, e)}
-                    onTouchStart={isMobile ? () => handleTouchStart(member.id, group.id) : undefined}
+                    onClick={!isMobile ? (e) => handleClick(member.id, group.id, e) : undefined}
+                    onTouchStart={isMobile ? (e) => handleTouchStart(member.id, group.id, e) : undefined}
                     onTouchEnd={isMobile ? handleTouchEnd : undefined}
+                    onTouchMove={isMobile ? handleTouchMove : undefined}
                     onTouchCancel={isMobile ? handleTouchCancel : undefined}
                     className={`flex-1 select-none ${
                       isViewingPastRound 
                         ? 'cursor-default' 
-                        : !swapSelectedParticipant ? (isMobile ? 'cursor-pointer' : 'cursor-move') : 'cursor-default'
+                        : !swapSelectedParticipant ? (isMobile ? 'cursor-pointer touch-manipulation' : 'cursor-move') : 'cursor-default'
                     }`}
+                    style={isMobile ? { 
+                      WebkitTouchCallout: 'none',
+                      WebkitUserSelect: 'none',
+                      touchAction: 'manipulation'
+                    } : undefined}
                     title={
                       isViewingPastRound ? '과거 라운드 - 편집 불가' :
                       isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
