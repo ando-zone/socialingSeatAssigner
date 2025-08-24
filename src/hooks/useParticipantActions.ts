@@ -345,12 +345,8 @@ export function useParticipantActions({
 
       const updatedResult = { ...result, groups: updatedGroups }
       
-      // participants 상태도 업데이트 (기존 participants에서 SWAP된 두 참가자만 업데이트)
-      const updatedParticipants = participants.map(p => {
-        if (p.id === participantId1) return updatedParticipant1
-        if (p.id === participantId2) return updatedParticipant2
-        return p
-      })
+      // participants 상태도 업데이트 (모든 그룹의 멤버들로부터 참가자 정보 추출)
+      const updatedParticipants = updatedGroups.flatMap(group => group.members)
       setParticipants(updatedParticipants)
       
       const { saveGroupingResult } = await import('@/utils/database')
