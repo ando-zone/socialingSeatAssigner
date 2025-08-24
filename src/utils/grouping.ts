@@ -640,11 +640,19 @@ export function updateMeetingHistory(
 
   // 각 그룹 내 참가자들의 만남 기록 업데이트
   groups.forEach(group => {
-    // 그룹 번호 히스토리 업데이트
+    // 그룹 번호 히스토리 업데이트 (같은 라운드에서 중복 방지)
     group.members.forEach(member => {
       const participant = updatedParticipants.find(p => p.id === member.id)
       if (participant) {
-        participant.groupHistory.push(group.id)
+        // 현재 라운드에서 이미 그룹 히스토리가 있는지 확인
+        // groupHistory.length가 round와 같으면 이미 현재 라운드의 그룹이 추가되어 있음
+        if (participant.groupHistory.length < round) {
+          // 새로운 라운드이므로 그룹 히스토리 추가
+          participant.groupHistory.push(group.id)
+        } else if (participant.groupHistory.length === round) {
+          // 같은 라운드에서 그룹 변경인 경우, 마지막 항목만 교체 (SWAP 등)
+          participant.groupHistory[participant.groupHistory.length - 1] = group.id
+        }
       }
     })
 
