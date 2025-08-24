@@ -343,7 +343,7 @@ export function useResultPage() {
     } catch (error) {
       console.error('전체 체크인 초기화 실패:', error)
     }
-  }, [participants])
+  }, [participants, broadcastChannel])
 
   return {
     // State
