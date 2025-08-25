@@ -22,6 +22,7 @@ export default function ResultPage() {
     activeTab,
     isMobile,
     checkInStatus,
+    currentMeeting,
     availableRounds,
     selectedHistoryRound,
     historyResult,
@@ -211,9 +212,11 @@ export default function ResultPage() {
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
               {result.round}라운드 결과
             </h1>
-            <p className="text-gray-600">
-              {result.round}라운드 그룹 배치 결과를 확인하고 관리하세요.
-            </p>
+            {currentMeeting && (
+              <div className="mt-2 text-sm text-blue-600">
+                현재 모임: {currentMeeting.name}
+              </div>
+            )}
           </div>
           <button
             onClick={() => router.push('/')}

@@ -12,6 +12,7 @@ export function useResultPage() {
   const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating' | 'history'>('groups')
   const [isMobile, setIsMobile] = useState(false)
   const [checkInStatus, setCheckInStatus] = useState<{[participantId: string]: boolean}>({})
+  const [currentMeeting, setCurrentMeeting] = useState<any>(null)
 
   // Round management
   const [availableRounds, setAvailableRounds] = useState<number[]>([])
@@ -53,6 +54,7 @@ export function useResultPage() {
         getParticipants, 
         getExitedParticipants,
         getCurrentMeetingId,
+        getCurrentMeeting,
         getAllRounds,
         checkTableStructure
       } = await import('@/utils/database')
@@ -68,12 +70,15 @@ export function useResultPage() {
       
       await checkTableStructure()
       
-      const [groupingResult, participants, exitedParticipants, rounds] = await Promise.all([
+      const [groupingResult, participants, exitedParticipants, rounds, meeting] = await Promise.all([
         getGroupingResult(),
         getParticipants(),
         getExitedParticipants(),
-        getAllRounds()
+        getAllRounds(),
+        getCurrentMeeting()
       ])
+      
+      setCurrentMeeting(meeting)
       
       if (groupingResult && participants.length > 0) {
         setExitedParticipants(exitedParticipants)
@@ -353,6 +358,7 @@ export function useResultPage() {
     activeTab,
     isMobile,
     checkInStatus,
+    currentMeeting,
     availableRounds,
     selectedHistoryRound,
     historyResult,
