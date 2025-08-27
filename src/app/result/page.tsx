@@ -7,6 +7,7 @@ import RoundSelector from '@/components/RoundSelector'
 import GroupResultsSummary from '@/components/GroupResultsSummary'
 import GroupCard from '@/components/GroupCard'
 import ParticipantStats from '@/components/ParticipantStats'
+import BackupManager from '@/components/BackupManager'
 
 // Hooks
 import { useResultPage } from '@/hooks/useResultPage'
@@ -15,6 +16,8 @@ import { useParticipantActions } from '@/hooks/useParticipantActions'
 export default function ResultPage() {
   const [toastVisible, setToastVisible] = useState(false)
   const [tableLayoutUrl, setTableLayoutUrl] = useState<string | null>(null)
+  const [snapshots, setSnapshots] = useState<any[]>([])
+  const [hasExistingResult, setHasExistingResult] = useState(false)
   
   const {
     result,
@@ -22,6 +25,7 @@ export default function ResultPage() {
     activeTab,
     isMobile,
     checkInStatus,
+    currentMeeting,
     availableRounds,
     selectedHistoryRound,
     historyResult,
@@ -149,6 +153,20 @@ export default function ResultPage() {
     loadTableLayout()
   }, [])
 
+  // 스냅샷 로드
+  useEffect(() => {
+    const loadSnapshots = async () => {
+      try {
+        const { getSnapshots } = await import('@/utils/backup')
+        const allSnapshots = await getSnapshots()
+        setSnapshots(allSnapshots)
+      } catch (error) {
+        console.error('스냅샷 로딩 실패:', error)
+      }
+    }
+    loadSnapshots()
+  }, [])
+
   // 이미지 업로드 핸들러
   const handleImageUpload = async (file: File): Promise<boolean> => {
     try {
@@ -177,6 +195,116 @@ export default function ResultPage() {
     } catch (error) {
       console.error('이미지 삭제 실패:', error)
       return false
+    }
+  }
+
+  // 백업 관련 함수들
+  const handleExportData = async () => {
+    try {
+      const { exportToJSON } = await import('@/utils/backup')
+      const jsonData = await exportToJSON()
+      const blob = new Blob([jsonData], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `socialingSeatAssigner_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      alert('데이터가 JSON 파일로 내보내졌습니다!')
+    } catch (error) {
+      console.error('데이터 내보내기 실패:', error)
+      alert('데이터 내보내기에 실패했습니다.')
+    }
+  }
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const { importFromJSON } = await import('@/utils/backup')
+      const fileContent = await file.text()
+      const result = await importFromJSON(fileContent)
+      
+      if (result.success) {
+        alert('데이터가 성공적으로 가져와졌습니다!')
+        window.location.reload()
+      } else {
+        alert(`데이터 가져오기 실패: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('데이터 가져오기 실패:', error)
+      alert('데이터 가져오기에 실패했습니다.')
+    }
+    event.target.value = ''
+  }
+
+  const handleRestoreSnapshot = async (snapshotId: number) => {
+    if (!confirm('이 스냅샷으로 복원하시겠습니까? 현재 데이터가 덮어씌워집니다.')) return
+    
+    try {
+      const { restoreSnapshot } = await import('@/utils/backup')
+      const success = await restoreSnapshot(snapshotId)
+      if (success) {
+        alert('스냅샷이 복원되었습니다!')
+        window.location.reload()
+      } else {
+        alert('스냅샷 복원에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('스냅샷 복원 실패:', error)
+      alert('스냅샷 복원에 실패했습니다.')
+    }
+  }
+
+  const handleDeleteSnapshot = async (snapshotId: number) => {
+    try {
+      const { deleteSnapshot } = await import('@/utils/backup')
+      const success = await deleteSnapshot(snapshotId)
+      if (success) {
+        alert('스냅샷이 삭제되었습니다!')
+        await refreshSnapshots()
+      } else {
+        alert('스냅샷 삭제에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('스냅샷 삭제 실패:', error)
+      alert('스냅샷 삭제에 실패했습니다.')
+    }
+  }
+
+  const refreshSnapshots = async () => {
+    try {
+      const { getSnapshots } = await import('@/utils/backup')
+      const allSnapshots = await getSnapshots()
+      setSnapshots(allSnapshots)
+    } catch (error) {
+      console.error('스냅샷 새로고침 실패:', error)
+    }
+  }
+
+  const handleNewMeeting = async () => {
+    const confirmMsg = '새 모임을 시작하면 현재 모든 데이터가 삭제됩니다.\n' +
+                      '이 작업은 되돌릴 수 없습니다.\n\n' +
+                      '계속하시겠습니까?'
+    
+    if (!confirm(confirmMsg)) return
+    
+    try {
+      const { clearCurrentMeetingData } = await import('@/utils/database')
+      const cleared = await clearCurrentMeetingData()
+      
+      if (cleared) {
+        alert('새 모임이 시작되었습니다!')
+        router.push('/')
+      } else {
+        alert('새 모임 시작에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('새 모임 시작 실패:', error)
+      alert('새 모임 시작에 실패했습니다.')
     }
   }
 
@@ -211,9 +339,11 @@ export default function ResultPage() {
             <h1 className="text-3xl font-bold text-gray-800 mb-2">
               {result.round}라운드 결과
             </h1>
-            <p className="text-gray-600">
-              {result.round}라운드 그룹 배치 결과를 확인하고 관리하세요.
-            </p>
+            {currentMeeting && (
+              <div className="mt-2 text-sm text-blue-600">
+                현재 모임: {currentMeeting.name}
+              </div>
+            )}
           </div>
           <button
             onClick={() => router.push('/')}
@@ -414,6 +544,19 @@ export default function ResultPage() {
             </div>
           </div>
         )}
+
+        {/* 백업 관리 */}
+        <div className="mt-8">
+          <BackupManager
+            snapshots={snapshots}
+            onExportData={handleExportData}
+            onImportData={handleImportData}
+            onRestoreSnapshot={handleRestoreSnapshot}
+            onDeleteSnapshot={handleDeleteSnapshot}
+            onRefreshSnapshots={refreshSnapshots}
+            onNewMeeting={handleNewMeeting}
+          />
+        </div>
 
         {/* 하단 액션 버튼들 */}
         <div className="mt-12 pt-8 border-t border-gray-200">

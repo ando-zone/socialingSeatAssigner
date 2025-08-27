@@ -541,15 +541,6 @@ export default function Home() {
             participantCount={participants.length}
           />
 
-          {/* 참가자 관리 */}
-          <ParticipantManager
-            participants={participants}
-            onAddParticipant={handleAddParticipant}
-            onRemoveParticipant={removeParticipant}
-            onBulkAdd={handleBulkAdd}
-            currentRound={currentRound}
-          />
-
           {/* 그룹 설정 */}
           <GroupingSettings
             groupingMode={groupingMode}
@@ -581,6 +572,15 @@ export default function Home() {
               customGroupSizes={customGroupSizes}
             />
           </div>
+
+          {/* 참가자 관리 */}
+          <ParticipantManager
+            participants={participants}
+            onAddParticipant={handleAddParticipant}
+            onRemoveParticipant={removeParticipant}
+            onBulkAdd={handleBulkAdd}
+            currentRound={currentRound}
+          />
 
           {/* 백업 관리 */}
           <BackupManager

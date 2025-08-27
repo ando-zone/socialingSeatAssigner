@@ -266,7 +266,14 @@ export default function GroupCard({
                             )}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
-                            그룹 히스토리: {[...(member.groupHistory || []), group.id].join('-')}
+                            그룹 히스토리: {(() => {
+                              const history = member.groupHistory || []
+                              const lastGroup = history[history.length - 1]
+                              if (history.length === 0 || lastGroup !== group.id) {
+                                return [...history, group.id].join('-')
+                              }
+                              return history.join('-')
+                            })()}
                           </div>
                         </div>
                         
