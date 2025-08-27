@@ -259,6 +259,7 @@ export default function GroupCard({
                             <span className={member.gender === 'male' ? 'text-blue-600 font-medium' : 'text-pink-600 font-medium'}>
                               {member.gender === 'male' ? '남성' : '여성'}
                             </span> • {' '}
+                            {member.age ? `${member.age}세 • ` : ''}{' '}
                             {member.mbti === 'extrovert' ? 'E' : 'I'}
                             {showCheckIn && (
                               <span> • 체크인: {isCheckedIn ? '✅' : '⏳'}</span>

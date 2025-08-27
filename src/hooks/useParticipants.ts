@@ -9,12 +9,14 @@ export function useParticipants() {
     name: string
     gender: 'male' | 'female'
     mbti: 'extrovert' | 'introvert'
+    age?: number | null
   }) => {
     const newParticipant: Participant = {
       id: Date.now().toString(),
       name: participantData.name,
       gender: participantData.gender,
       mbti: participantData.mbti,
+      age: participantData.age || null,
       meetingsByRound: {},
       allMetPeople: [],
       groupHistory: []
@@ -64,9 +66,9 @@ export function useParticipants() {
       const trimmedLine = line.trim()
       if (!trimmedLine) continue
       
-      let name = '', gender: 'male' | 'female' = 'male', mbti: 'extrovert' | 'introvert' = 'extrovert'
+      let name = '', gender: 'male' | 'female' = 'male', age: number | null = null, mbti: 'extrovert' | 'introvert' = 'extrovert'
       
-      // 콤마로 분리된 형식 처리
+      // 콤마로 분리된 형식 처리 (이름,성별,나이,성격)
       if (trimmedLine.includes(',')) {
         const parts = trimmedLine.split(',').map(p => p.trim())
         
@@ -76,11 +78,24 @@ export function useParticipants() {
           gender = (genderStr === '여성' || genderStr === 'female' || genderStr === '여') ? 'female' : 'male'
         }
         if (parts.length >= 3) {
-          const mbtiStr = parts[2].toLowerCase()
+          const ageStr = parts[2].trim()
+          if (ageStr && !isNaN(parseInt(ageStr))) {
+            age = parseInt(ageStr)
+          }
+        }
+        if (parts.length >= 4) {
+          const mbtiStr = parts[3].toLowerCase()
           mbti = (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i') ? 'introvert' : 'extrovert'
+        } else if (parts.length >= 3 && !parts[2].trim()) {
+          // 나이가 비어있고 3번째 항목이 성격인 경우
+          const mbtiStr = parts[2].toLowerCase()
+          if (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i' || mbtiStr === '외향형' || mbtiStr === 'extrovert' || mbtiStr === 'e') {
+            age = null
+            mbti = (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i') ? 'introvert' : 'extrovert'
+          }
         }
       } else {
-        // 공백으로 분리된 형식 처리
+        // 공백으로 분리된 형식 처리 (이름 성별 나이 성격)
         const parts = trimmedLine.split(/\s+/)
         
         if (parts.length >= 1) name = parts[0]
@@ -89,8 +104,20 @@ export function useParticipants() {
           gender = (genderStr === '여성' || genderStr === 'female' || genderStr === '여') ? 'female' : 'male'
         }
         if (parts.length >= 3) {
-          const mbtiStr = parts[2].toLowerCase()
-          mbti = (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i') ? 'introvert' : 'extrovert'
+          const thirdPart = parts[2].trim()
+          // 3번째 부분이 숫자인지 확인
+          if (thirdPart && !isNaN(parseInt(thirdPart))) {
+            age = parseInt(thirdPart)
+            // 4번째 부분이 성격
+            if (parts.length >= 4) {
+              const mbtiStr = parts[3].toLowerCase()
+              mbti = (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i') ? 'introvert' : 'extrovert'
+            }
+          } else {
+            // 3번째 부분이 성격인 경우 (나이 없음)
+            const mbtiStr = thirdPart.toLowerCase()
+            mbti = (mbtiStr === '내향형' || mbtiStr === 'introvert' || mbtiStr === 'i') ? 'introvert' : 'extrovert'
+          }
         }
       }
       
@@ -100,6 +127,7 @@ export function useParticipants() {
           name,
           gender,
           mbti,
+          age,
           meetingsByRound: {},
           allMetPeople: [],
           groupHistory: []

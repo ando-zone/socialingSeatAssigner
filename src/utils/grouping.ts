@@ -3,6 +3,7 @@ export interface Participant {
   name: string
   gender: 'male' | 'female'
   mbti: 'extrovert' | 'introvert'
+  age?: number | null // 나이 (선택적)
   meetingsByRound: { [round: number]: string[] } // 라운드별 만남 기록
   allMetPeople: string[] // 전체 만난 사람 목록 (중복 제거)
   groupHistory: number[] // 그룹 히스토리

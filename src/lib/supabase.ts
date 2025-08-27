@@ -79,6 +79,7 @@ export interface Database {
           name: string
           gender: 'male' | 'female'
           mbti: 'extrovert' | 'introvert'
+          age: number | null
           meetings_by_round: Record<string, string[]>
           all_met_people: string[]
           group_history: number[]
@@ -91,6 +92,7 @@ export interface Database {
           name: string
           gender: 'male' | 'female'
           mbti: 'extrovert' | 'introvert'
+          age?: number | null
           meetings_by_round?: Record<string, string[]>
           all_met_people?: string[]
           group_history?: number[]
@@ -103,6 +105,7 @@ export interface Database {
           name?: string
           gender?: 'male' | 'female'
           mbti?: 'extrovert' | 'introvert'
+          age?: number | null
           meetings_by_round?: Record<string, string[]>
           all_met_people?: string[]
           group_history?: number[]

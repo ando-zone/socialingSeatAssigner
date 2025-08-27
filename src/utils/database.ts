@@ -16,6 +16,7 @@ export interface DBParticipant {
   name: string
   gender: 'male' | 'female'
   mbti: 'extrovert' | 'introvert'
+  age: number | null
   meetings_by_round: Record<string, string[]>
   all_met_people: string[]
   group_history: number[]
@@ -190,6 +191,7 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
         name: p.name,
         gender: p.gender,
         mbti: p.mbti,
+        age: p.age || null,
         meetings_by_round: p.meetingsByRound,
         all_met_people: p.allMetPeople,
         group_history: p.groupHistory,
@@ -210,6 +212,7 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
             name: p.name,
             gender: p.gender,
             mbti: p.mbti,
+            age: p.age || null,
             meetings_by_round: p.meetingsByRound,
             all_met_people: p.allMetPeople,
             group_history: p.groupHistory
@@ -253,6 +256,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
       name: p.name,
       gender: p.gender,
       mbti: p.mbti,
+      age: p.age,
       meetingsByRound: p.meetings_by_round || {},
       allMetPeople: p.all_met_people || [],
       groupHistory: p.group_history || [],

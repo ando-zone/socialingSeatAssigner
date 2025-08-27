@@ -90,7 +90,7 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                           key={member.id} 
                           className="bg-blue-50 text-blue-800 px-4 py-2 rounded-full text-base font-semibold"
                         >
-                          {member.name}
+                          {member.name}{member.age ? ` (${member.age})` : ''}
                         </span>
                       ))}
                     </div>
@@ -110,7 +110,7 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                           key={member.id} 
                           className="bg-pink-50 text-pink-800 px-4 py-2 rounded-full text-base font-semibold"
                         >
-                          {member.name}
+                          {member.name}{member.age ? ` (${member.age})` : ''}
                         </span>
                       ))}
                     </div>
@@ -181,7 +181,7 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                             isCheckedIn ? 'text-green-800' : 'text-gray-800'
                           }`}>
                             {isCheckedIn && <span className="mr-2">✅</span>}
-                            {member.name}
+                            {member.name}{member.age ? ` (${member.age}세)` : ''}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export default function SeatingChart({ groups, participants, checkInStatus, onTo
                             isCheckedIn ? 'text-green-800' : 'text-gray-800'
                           }`}>
                             {isCheckedIn && <span className="mr-2">✅</span>}
-                            {member.name}
+                            {member.name}{member.age ? ` (${member.age}세)` : ''}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
