@@ -381,11 +381,11 @@ export default function MeetingSelector({ user, onMeetingSelected }: MeetingSele
           )}
         </div>
 
-        {/* 선택 완료 버튼 */}
+        {/* 모임 선택 완료 액션 버튼 - 모임이 선택된 경우에만 표시 */}
         {selectedMeetingId && (
           <div className="mt-8 text-center">
             <button
-              onClick={onMeetingSelected}
+              onClick={onMeetingSelected}  // Auth.tsx로 선택 완료 알림 전송
               className="bg-green-500 hover:bg-green-600 text-white font-medium py-4 px-8 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
               <div className="flex items-center space-x-2">

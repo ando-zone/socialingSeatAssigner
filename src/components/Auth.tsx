@@ -1,31 +1,72 @@
 'use client'
 
+/**
+ * Authentication and Authorization Component for Socialing Seat Assigner
+ * 
+ * 이 컴포넌트는 전체 애플리케이션의 인증 게이트웨이 역할을 합니다.
+ * 주요 기능:
+ * 1. Supabase 인증 시스템 통합 (이메일/비밀번호, Google OAuth)
+ * 2. 자동 모임 동기화 (사용자의 최근 모임 자동 선택)
+ * 3. 비밀번호 재설정 기능
+ * 4. 인증 상태에 따른 라우팅 제어
+ * 5. 환경 설정 검증 및 오류 처리
+ * 
+ * 아키텍처:
+ * - 인증되지 않은 사용자: 로그인/회원가입 폼 표시
+ * - 인증된 사용자 + 모임 없음: MeetingSelector 컴포넌트 표시
+ * - 인증된 사용자 + 모임 있음: children (메인 앱) 렌더링
+ * 
+ * 데이터 흐름:
+ * Auth.tsx → Supabase Auth → Database.ts → MeetingSelector → Main App
+ */
+
 import { useState, useEffect } from 'react'
 import { createSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import { getCurrentMeetingId } from '@/utils/database'
 import MeetingSelector from './MeetingSelector'
 import type { User } from '@supabase/supabase-js'
 
+/**
+ * Auth 컴포넌트의 Props 인터페이스
+ * @interface AuthProps
+ * @property {React.ReactNode} children - 인증 후 렌더링할 자식 컴포넌트들 (메인 앱)
+ */
 interface AuthProps {
   children: React.ReactNode
 }
 
+/**
+ * 메인 인증 컴포넌트
+ * 전체 앱을 감싸며 인증 상태와 모임 선택 상태를 관리합니다.
+ * 
+ * @param {AuthProps} props - children을 포함한 컴포넌트 props
+ * @returns {JSX.Element} 인증 상태에 따른 적절한 UI
+ */
 export default function Auth({ children }: AuthProps) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [hasMeeting, setHasMeeting] = useState(false)
-  const [checkingMeeting, setCheckingMeeting] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [authLoading, setAuthLoading] = useState(false)
-  const [message, setMessage] = useState('')
-  const [showForgotPassword, setShowForgotPassword] = useState(false)
-  const [resetEmail, setResetEmail] = useState('')
+  // 인증 상태 관리
+  const [user, setUser] = useState<User | null>(null)           // 현재 로그인된 사용자 정보
+  const [loading, setLoading] = useState(true)                  // 초기 인증 상태 로딩 중 여부
+  
+  // 모임 상태 관리
+  const [hasMeeting, setHasMeeting] = useState(false)          // 사용자가 모임을 선택했는지 여부
+  const [checkingMeeting, setCheckingMeeting] = useState(true) // 모임 상태 확인 중 여부
+  
+  // 인증 폼 상태
+  const [email, setEmail] = useState('')                       // 로그인/회원가입 이메일
+  const [password, setPassword] = useState('')                 // 로그인/회원가입 비밀번호
+  const [isSignUp, setIsSignUp] = useState(false)             // 회원가입 모드 여부
+  const [authLoading, setAuthLoading] = useState(false)       // 인증 요청 진행 중 여부
+  const [message, setMessage] = useState('')                   // 사용자에게 표시할 메시지
+  
+  // 비밀번호 재설정 상태
+  const [showForgotPassword, setShowForgotPassword] = useState(false) // 비밀번호 재설정 모달 표시 여부
+  const [resetEmail, setResetEmail] = useState('')             // 비밀번호 재설정용 이메일
 
+  // Supabase 클라이언트 초기화
   const supabase = createSupabaseClient()
 
-  // Supabase가 설정되지 않은 경우 바로 children 렌더링
+  // Supabase 환경변수 미설정 시 경고와 함께 앱 실행 (로컬 모드)
+  // 이 경우 데이터베이스 없이 LocalStorage만 사용하여 동작
   if (!isSupabaseConfigured) {
     return (
       <div>
@@ -67,8 +108,20 @@ export default function Auth({ children }: AuthProps) {
     )
   }
 
+  /**
+   * 컴포넌트 마운트 시 인증 상태 초기화 및 상태 변경 리스너 등록
+   * 
+   * 수행하는 작업:
+   * 1. 현재 사용자 인증 상태 확인
+   * 2. 인증된 사용자의 모임 상태 자동 확인
+   * 3. 인증 상태 변경 시 실시간 업데이트 처리
+   * 4. 자동 모임 동기화 (사용자의 최근 모임 자동 선택)
+   */
   useEffect(() => {
-    // 현재 사용자 상태 확인
+    /**
+     * 현재 사용자 인증 상태를 확인하고 모임 상태를 검증합니다.
+     * Supabase에서 사용자 정보를 가져와 전역 상태를 업데이트합니다.
+     */
     const getUser = async () => {
       if (!supabase) return
       const { data: { user } } = await supabase.auth.getUser()
@@ -82,7 +135,11 @@ export default function Auth({ children }: AuthProps) {
 
     getUser()
 
-    // 인증 상태 변경 리스너
+    /**
+     * 실시간 인증 상태 변경 리스너 등록
+     * 로그인, 로그아웃, 세션 만료 등의 이벤트를 감지하여
+     * 앱 상태를 실시간으로 업데이트합니다.
+     */
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         (event: any, session: any) => {
@@ -102,14 +159,26 @@ export default function Auth({ children }: AuthProps) {
     }
   }, [supabase])
 
+  /**
+   * 사용자의 모임 상태를 확인하고 자동 동기화를 수행합니다.
+   * 
+   * 자동 동기화 로직:
+   * 1. LocalStorage의 현재 모임 ID 확인
+   * 2. 사용자의 Supabase 모임 목록 조회
+   * 3. 현재 모임이 유효하지 않으면 최근 모임으로 자동 전환
+   * 4. 선택된 모임의 데이터를 자동으로 동기화
+   * 
+   * @param {User} [user] - 인증된 사용자 객체 (선택적)
+   */
   const checkMeetingStatus = async (user?: User) => {
     setCheckingMeeting(true)
     
     try {
-      // 현재 저장된 모임 ID 확인
+      // 현재 LocalStorage에 저장된 모임 ID 확인
       let meetingId = getCurrentMeetingId()
       
-      // 사용자가 있고 Supabase가 설정된 경우 자동 모임 찾기 시도
+      // 인증된 사용자 + Supabase 연결 시 스마트 모임 동기화 실행
+      // 이 로직은 사용자의 편의성을 위해 최근 모임을 자동으로 선택합니다
       if (user && supabase && isSupabaseConfigured) {
         console.log('🔍 자동 모임 동기화 시작...')
         
@@ -117,11 +186,12 @@ export default function Auth({ children }: AuthProps) {
         const userMeetings = await getUserMeetings(user.id)
         
         if (userMeetings.length > 0) {
-          // 현재 모임이 사용자 모임 목록에 있는지 확인
+          // 현재 LocalStorage의 모임이 사용자 소유 모임인지 검증
           const currentMeetingExists = meetingId && userMeetings.find(m => m.id === meetingId)
           
           if (!currentMeetingExists) {
-            // 가장 최근에 업데이트된 모임을 선택
+            // 스마트 모임 선택: 가장 최근에 활동한 모임을 자동 선택
+            // updated_at 기준으로 정렬하여 사용자가 마지막으로 작업한 모임을 우선 선택
             const latestMeeting = userMeetings.sort((a, b) => 
               new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             )[0]
@@ -131,13 +201,14 @@ export default function Auth({ children }: AuthProps) {
             setCurrentMeetingId(latestMeeting.id)
             meetingId = latestMeeting.id
             
-            // DB에서 데이터 로드 시도
+            // 선택된 모임의 모든 데이터를 병렬로 동기화
+            // 이 과정에서 참가자, 그룹 결과, 설정, 탈퇴자 정보를 한 번에 로드
             try {
               const { 
-                getParticipants, 
-                getGroupingResult, 
-                getGroupSettings, 
-                getExitedParticipants 
+                getParticipants,      // 현재 참가자 목록
+                getGroupingResult,    // 최신 그룹 배치 결과
+                getGroupSettings,     // 그룹 생성 설정 (성비, 크기 등)
+                getExitedParticipants // 중도 탈퇴한 참가자들
               } = await import('@/utils/database')
               
               console.log('📥 모임 데이터 동기화 시작...')
@@ -149,12 +220,13 @@ export default function Auth({ children }: AuthProps) {
                 getExitedParticipants()
               ])
               
-              // 데이터 동기화 완료
+              // 동기화 완료 로그 - 개발자 디버깅용
+              // 로드된 데이터의 상태를 한눈에 파악할 수 있도록 요약 정보 출력
               console.log('✅ 모임 데이터 로드 완료:', {
-                participantCount: participants.length,
-                currentRound: groupingResult ? groupingResult.round + 1 : latestMeeting.current_round,
-                hasGroupSettings: !!groupSettings,
-                exitedParticipantCount: Object.keys(exitedParticipants).length
+                participantCount: participants.length,                                    // 총 참가자 수
+                currentRound: groupingResult ? groupingResult.round + 1 : latestMeeting.current_round, // 다음 라운드 번호
+                hasGroupSettings: !!groupSettings,                                       // 그룹 설정 존재 여부
+                exitedParticipantCount: Object.keys(exitedParticipants).length         // 탈퇴자 수
               })
               
               console.log('🎉 모든 데이터 동기화 완료!')
@@ -182,10 +254,26 @@ export default function Auth({ children }: AuthProps) {
     }
   }
 
+  /**
+   * MeetingSelector에서 모임이 선택되었을 때 호출되는 콜백
+   * 모임 선택 완료 후 메인 앱으로 전환하는 역할
+   */
   const handleMeetingSelected = () => {
     setHasMeeting(true)
   }
 
+  /**
+   * 이메일/비밀번호 인증 처리 함수
+   * 로그인 또는 회원가입을 수행하며, 성공 시 자동으로 인증 상태가 업데이트됩니다.
+   * 
+   * 처리 과정:
+   * 1. 폼 검증 및 로딩 상태 설정
+   * 2. isSignUp 상태에 따라 가입 또는 로그인 실행
+   * 3. 회원가입 시 이메일 확인 요청 메시지 표시
+   * 4. 오류 발생 시 사용자 친화적 메시지 표시
+   * 
+   * @param {React.FormEvent} e - 폼 제출 이벤트
+   */
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supabase) return
@@ -195,6 +283,7 @@ export default function Auth({ children }: AuthProps) {
 
     try {
       if (isSignUp) {
+        // 새 계정 생성 - 이메일 확인 필요
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -202,6 +291,7 @@ export default function Auth({ children }: AuthProps) {
         if (error) throw error
         setMessage('가입 확인 이메일을 보냈습니다. 이메일을 확인해 주세요.')
       } else {
+        // 기존 계정으로 로그인
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -209,17 +299,33 @@ export default function Auth({ children }: AuthProps) {
         if (error) throw error
       }
     } catch (error: any) {
+      // Supabase 오류를 사용자 친화적 메시지로 변환
       setMessage(error.message)
     } finally {
       setAuthLoading(false)
     }
   }
 
+  /**
+   * 로그아웃 처리 함수
+   * Supabase 세션을 종료하고 인증 상태 리스너가 자동으로 상태를 업데이트합니다.
+   */
   const handleSignOut = async () => {
     if (!supabase) return
     await supabase.auth.signOut()
   }
 
+  /**
+   * Google OAuth 로그인 처리 함수
+   * 
+   * Google 인증 플로우:
+   * 1. Google OAuth 제공자로 리디렉션
+   * 2. 사용자가 Google에서 인증 완료
+   * 3. /auth/callback으로 리디렉션되어 세션 설정
+   * 4. 메인 앱으로 자동 전환
+   * 
+   * 주의: 리디렉션 기반이므로 현재 페이지를 떠나게 됩니다.
+   */
   const handleGoogleSignIn = async () => {
     if (!supabase) return
     
@@ -228,6 +334,7 @@ export default function Auth({ children }: AuthProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
+          // 인증 완료 후 콜백 URL 설정
           redirectTo: `${window.location.origin}/auth/callback`
         }
       })
@@ -238,6 +345,17 @@ export default function Auth({ children }: AuthProps) {
     }
   }
 
+  /**
+   * 비밀번호 재설정 이메일 발송 처리 함수
+   * 
+   * 비밀번호 재설정 플로우:
+   * 1. 사용자가 등록된 이메일 주소 입력
+   * 2. Supabase에서 재설정 링크가 포함된 이메일 발송
+   * 3. 사용자가 이메일의 링크 클릭 시 /auth/reset-password로 리디렉션
+   * 4. 새 비밀번호 설정 완료
+   * 
+   * @param {React.FormEvent} e - 폼 제출 이벤트
+   */
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supabase) return
@@ -248,6 +366,7 @@ export default function Auth({ children }: AuthProps) {
     try {
       console.log('🔄 Sending password reset email...')
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        // 비밀번호 재설정 완료 후 리디렉션될 URL
         redirectTo: `${window.location.origin}/auth/reset-password`
       })
       if (error) {
@@ -256,7 +375,7 @@ export default function Auth({ children }: AuthProps) {
       }
       console.log('✅ Password reset email sent successfully')
       setMessage('비밀번호 재설정 링크를 이메일로 보냈습니다. 이메일을 확인해 주세요.')
-      setShowForgotPassword(false)
+      setShowForgotPassword(false)  // 모달 닫기
     } catch (error: any) {
       console.error('❌ Password reset failed:', error)
       setMessage(error.message || '비밀번호 재설정 요청 중 오류가 발생했습니다.')
@@ -265,6 +384,7 @@ export default function Auth({ children }: AuthProps) {
     }
   }
 
+  // 로딩 상태 UI - 인증 상태 확인 중이거나 모임 상태 확인 중일 때 표시
   if (loading || checkingMeeting) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -276,12 +396,13 @@ export default function Auth({ children }: AuthProps) {
     )
   }
 
+  // 미인증 사용자 UI - 로그인/회원가입 폼과 Google OAuth 제공
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="max-w-md w-full mx-4">
           <div className="bg-white rounded-lg shadow-xl p-8">
-            {/* 로고 및 제목 */}
+            {/* 브랜딩 및 앱 소개 섹션 */}
             <div className="text-center mb-8">
               <div className="text-4xl mb-4">🪑</div>
               <h1 className="text-2xl font-bold text-gray-800 mb-2">
@@ -292,7 +413,7 @@ export default function Auth({ children }: AuthProps) {
               </p>
             </div>
 
-            {/* 비밀번호 찾기 모달 */}
+            {/* 비밀번호 재설정 모달 - 조건부 렌더링 */}
             {showForgotPassword ? (
               <form onSubmit={handlePasswordReset} className="space-y-6">
                 <div>
@@ -316,11 +437,12 @@ export default function Auth({ children }: AuthProps) {
                   />
                 </div>
 
+                {/* 성공/오류 메시지 - 메시지 내용에 따라 동적 스타일링 */}
                 {message && (
                   <div className={`p-3 rounded-md text-sm ${
                     message.includes('보냈습니다') || message.includes('확인')
-                      ? 'bg-green-50 text-green-700 border border-green-200'
-                      : 'bg-red-50 text-red-700 border border-red-200'
+                      ? 'bg-green-50 text-green-700 border border-green-200'  // 성공 메시지
+                      : 'bg-red-50 text-red-700 border border-red-200'        // 오류 메시지
                   }`}>
                     {message}
                   </div>
@@ -349,7 +471,7 @@ export default function Auth({ children }: AuthProps) {
               </form>
             ) : (
               <>
-                {/* 인증 폼 */}
+                {/* 메인 인증 폼 - 이메일/비밀번호 로그인 및 회원가입 */}
                 <form onSubmit={handleAuth} className="space-y-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -393,11 +515,12 @@ export default function Auth({ children }: AuthProps) {
                     />
                   </div>
 
+                  {/* 인증 결과 메시지 표시 영역 */}
                   {message && (
                     <div className={`p-3 rounded-md text-sm ${
                       message.includes('확인') 
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : 'bg-red-50 text-red-700 border border-red-200'
+                        ? 'bg-green-50 text-green-700 border border-green-200'  // 성공 (회원가입 완료)
+                        : 'bg-red-50 text-red-700 border border-red-200'        // 오류 (로그인 실패 등)
                     }`}>
                       {message}
                     </div>
@@ -419,9 +542,10 @@ export default function Auth({ children }: AuthProps) {
               </>
             )}
 
-            {/* 구글 로그인 */}
+            {/* Google OAuth 인증 섹션 - 비밀번호 재설정 모드가 아닐 때만 표시 */}
             {!showForgotPassword && (
               <>
+                {/* 구분선 with "또는" 텍스트 */}
                 <div className="mt-6">
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
@@ -459,12 +583,12 @@ export default function Auth({ children }: AuthProps) {
                   </button>
                 </div>
 
-                {/* 회원가입/로그인 전환 */}
+                {/* 로그인/회원가입 모드 전환 버튼 */}
                 <div className="mt-6 text-center">
                   <button
                     onClick={() => {
-                      setIsSignUp(!isSignUp)
-                      setMessage('')
+                      setIsSignUp(!isSignUp)  // 모드 토글
+                      setMessage('')           // 기존 메시지 초기화
                     }}
                     className="text-sm text-blue-600 hover:text-blue-700"
                   >
@@ -482,23 +606,30 @@ export default function Auth({ children }: AuthProps) {
     )
   }
 
-  // 사용자가 로그인했지만 모임을 선택하지 않은 경우
+  // 인증된 사용자의 모임 선택 단계
+  // 사용자가 로그인했지만 아직 모임을 선택하지 않은 경우 MeetingSelector 표시
   if (user && !hasMeeting) {
     return <MeetingSelector user={user} onMeetingSelected={handleMeetingSelected} />
   }
 
+  // 메인 앱 렌더링 - 인증 완료 + 모임 선택 완료 상태
+  // 상단에 사용자 정보와 네비게이션을 표시하고 하단에 메인 앱 컨텐츠 렌더링
   return (
     <div>
-      {/* 사용자 정보 표시 */}
+      {/* 상단 네비게이션 바 - 사용자 정보 및 주요 액션 버튼들 */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex justify-between items-center">
+            {/* 사용자 인사말 */}
             <div className="flex items-center space-x-3">
               <div className="text-sm text-gray-600">
                 안녕하세요, <span className="font-medium text-gray-800">{user.email}</span>님
               </div>
             </div>
+            
+            {/* 사용자 액션 버튼들 */}
             <div className="flex items-center space-x-4">
+              {/* 모임 변경 버튼 - MeetingSelector로 돌아가기 */}
               <button
                 onClick={() => {
                   setHasMeeting(false)
@@ -507,6 +638,8 @@ export default function Auth({ children }: AuthProps) {
               >
                 모임 변경
               </button>
+              
+              {/* 비밀번호 변경 버튼 - 외부 설정 페이지로 리디렉션 */}
               <button
                 onClick={() => {
                   window.location.href = '/settings/password'
@@ -515,6 +648,8 @@ export default function Auth({ children }: AuthProps) {
               >
                 비밀번호 변경
               </button>
+              
+              {/* 로그아웃 버튼 */}
               <button
                 onClick={handleSignOut}
                 className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded-md hover:bg-gray-100 transition-colors"
@@ -525,6 +660,8 @@ export default function Auth({ children }: AuthProps) {
           </div>
         </div>
       </div>
+      
+      {/* 메인 애플리케이션 컨텐츠 렌더링 */}
       {children}
     </div>
   )

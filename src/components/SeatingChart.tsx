@@ -325,7 +325,7 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
                   </div>
                 )}
 
-                {/* 여성 섹션 */}
+                {/* 여성 섹션 - 성별별 그룹 구성원 표시 */}
                 {femaleMembers.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
