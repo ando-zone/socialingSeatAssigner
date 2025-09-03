@@ -101,7 +101,10 @@ export default function ResultPage() {
   }
 
   // 테이블 정렬 핸들러
-  const handleSort = (column: typeof sortBy) => {
+  const handleSort = (column: typeof sortBy, tableId?: string) => {
+    // 정렬 전 스크롤 위치 저장
+    const currentScrollY = window.scrollY
+    
     if (sortBy === column) {
       // 같은 칼럼을 다시 클릭하면 순서 변경
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -109,6 +112,20 @@ export default function ResultPage() {
       // 다른 칼럼을 클릭하면 해당 칼럼으로 오름차순 정렬
       setSortBy(column)
       setSortOrder('asc')
+    }
+    
+    // 정렬 후 스크롤 위치 복원
+    if (tableId) {
+      setTimeout(() => {
+        const tableElement = document.getElementById(tableId)
+        if (tableElement) {
+          // 테이블의 위치로 부드럽게 스크롤
+          tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        } else {
+          // tableId가 없으면 기존 스크롤 위치 유지
+          window.scrollTo(0, currentScrollY)
+        }
+      }, 0)
     }
   }
 
@@ -1465,8 +1482,8 @@ export default function ResultPage() {
                       }
 
                       // 테이블 렌더링 함수
-                      const renderTable = (participants: any[], title: string, titleColor: string, bgColor: string) => (
-                        <div className="bg-white rounded-lg shadow-md p-6">
+                      const renderTable = (participants: any[], title: string, titleColor: string, bgColor: string, tableId: string) => (
+                        <div id={tableId} className="bg-white rounded-lg shadow-md p-6">
                           <h3 className="text-lg font-semibold mb-4 flex items-center">
                             <span className={`${titleColor} mr-2`}>👥</span>
                             {title} ({participants.length}명)
@@ -1480,7 +1497,7 @@ export default function ResultPage() {
                                 <thead className={`${bgColor}`}>
                                   <tr>
                                     <th 
-                                      onClick={() => handleSort('name')}
+                                      onClick={() => handleSort('name', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
                                       <div className="flex items-center justify-between">
@@ -1492,7 +1509,7 @@ export default function ResultPage() {
                                       <span className="font-semibold text-gray-700">MBTI</span>
                                     </th>
                                     <th 
-                                      onClick={() => handleSort('totalMet')}
+                                      onClick={() => handleSort('totalMet', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
                                       <div className="flex items-center justify-center gap-1">
@@ -1501,7 +1518,7 @@ export default function ResultPage() {
                                       </div>
                                     </th>
                                     <th 
-                                      onClick={() => handleSort('oppositeMet')}
+                                      onClick={() => handleSort('oppositeMet', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
                                       <div className="flex items-center justify-center gap-1">
@@ -1510,7 +1527,7 @@ export default function ResultPage() {
                                       </div>
                                     </th>
                                     <th 
-                                      onClick={() => handleSort('newInCurrentRound')}
+                                      onClick={() => handleSort('newInCurrentRound', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
                                       <div className="flex items-center justify-center gap-1">
@@ -1519,7 +1536,7 @@ export default function ResultPage() {
                                       </div>
                                     </th>
                                     <th 
-                                      onClick={() => handleSort('currentGroupId')}
+                                      onClick={() => handleSort('currentGroupId', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
                                       <div className="flex items-center justify-center gap-1">
@@ -1776,10 +1793,10 @@ export default function ResultPage() {
                       return (
                         <div className="space-y-6">
                           {/* 남성 테이블 */}
-                          {renderTable(maleParticipants, '남성 참가자', 'text-blue-500', 'bg-blue-50')}
+                          {renderTable(maleParticipants, '남성 참가자', 'text-blue-500', 'bg-blue-50', 'male-table')}
                           
                           {/* 여성 테이블 */}
-                          {renderTable(femaleParticipants, '여성 참가자', 'text-red-500', 'bg-red-50')}
+                          {renderTable(femaleParticipants, '여성 참가자', 'text-red-500', 'bg-red-50', 'female-table')}
                         </div>
                       )
                     })()}
