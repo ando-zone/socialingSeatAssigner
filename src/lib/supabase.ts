@@ -219,6 +219,8 @@ export interface Database {
           group_size: number
           num_groups: number
           custom_group_sizes: number[]
+          custom_group_genders: {maleCount: number, femaleCount: number}[]
+          enable_gender_ratio: boolean
           created_at: string
           updated_at: string
         }
@@ -229,6 +231,8 @@ export interface Database {
           group_size?: number
           num_groups?: number
           custom_group_sizes?: number[]
+          custom_group_genders?: {maleCount: number, femaleCount: number}[]
+          enable_gender_ratio?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -239,6 +243,8 @@ export interface Database {
           group_size?: number
           num_groups?: number
           custom_group_sizes?: number[]
+          custom_group_genders?: {maleCount: number, femaleCount: number}[]
+          enable_gender_ratio?: boolean
           created_at?: string
           updated_at?: string
         }

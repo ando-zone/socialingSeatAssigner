@@ -587,44 +587,20 @@ export const saveGroupSettings = async (settings: {
       .delete()
       .eq('meeting_id', meetingId)
 
-    // 새 설정 저장 - 먼저 기본 설정만으로 시도
-    let insertData: any = {
+    // 새 설정 저장 - 모든 필드를 한 번에 저장
+    const insertData: any = {
       meeting_id: meetingId,
       grouping_mode: settings.groupingMode,
       group_size: settings.groupSize,
       num_groups: settings.numGroups,
-      custom_group_sizes: settings.customGroupSizes
+      custom_group_sizes: settings.customGroupSizes,
+      custom_group_genders: settings.customGroupGenders,
+      enable_gender_ratio: settings.enableGenderRatio
     }
     
-    let { error } = await supabase
+    const { error } = await supabase
       .from('group_settings')
       .insert(insertData)
-    
-    // 기본 설정 저장에 성공했고, 새로운 컬럼이 있다면 업데이트 시도
-    if (!error) {
-      try {
-        const updateData: any = {}
-        if (settings.customGroupGenders) {
-          updateData.custom_group_genders = settings.customGroupGenders
-        }
-        if (settings.enableGenderRatio !== undefined) {
-          updateData.enable_gender_ratio = settings.enableGenderRatio
-        }
-        
-        if (Object.keys(updateData).length > 0) {
-          const { error: updateError } = await supabase
-            .from('group_settings')
-            .update(updateData)
-            .eq('meeting_id', meetingId)
-          
-          if (updateError) {
-            console.log('성비 설정 저장 건너뜀 (마이그레이션 필요):', updateError.message)
-          }
-        }
-      } catch (updateErr) {
-        console.log('성비 설정 업데이트 건너뜀 (마이그레이션 필요)')
-      }
-    }
 
     if (error) throw error
     return true
