@@ -71,8 +71,14 @@ export default function ResultPage() {
   const [swapMessage, setSwapMessage] = useState<string | null>(null)       // 위치 변경 성공/실패 메시지
   const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)  // 터치용 선택된 참가자
   
-  // UI 상태 관리
-  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>('groups')  // 현재 활성 탭
+  // UI 상태 관리 - localStorage에서 탭 상태 복원
+  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem('result-active-tab') as 'groups' | 'stats' | 'seating'
+      return savedTab || 'groups'
+    }
+    return 'groups'
+  })  // 현재 활성 탭
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)   // 통계 탭에서 선택된 참가자
   const [isMobile, setIsMobile] = useState(false)                          // 모바일 환경 감지
   
@@ -83,6 +89,12 @@ export default function ResultPage() {
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })  // 편집 폼 데이터
+
+  // 탭 변경 함수 - localStorage에 저장
+  const changeActiveTab = (tab: 'groups' | 'stats' | 'seating') => {
+    setActiveTab(tab)
+    localStorage.setItem('result-active-tab', tab)
+  }
 
   useEffect(() => {
     const loadData = async () => {
@@ -788,7 +800,7 @@ export default function ResultPage() {
         <div className="bg-white rounded-lg shadow-md mb-8">
           <div className="flex border-b border-gray-200">
             <button
-              onClick={() => setActiveTab('groups')}
+              onClick={() => changeActiveTab('groups')}
               className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
                 activeTab === 'groups'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
@@ -799,7 +811,7 @@ export default function ResultPage() {
               그룹 결과
             </button>
             <button
-              onClick={() => setActiveTab('seating')}
+              onClick={() => changeActiveTab('seating')}
               className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
                 activeTab === 'seating'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
@@ -810,7 +822,7 @@ export default function ResultPage() {
               좌석 배치도
             </button>
             <button
-              onClick={() => setActiveTab('stats')}
+              onClick={() => changeActiveTab('stats')}
               className={`flex-1 py-4 px-6 text-center font-medium transition-colors ${
                 activeTab === 'stats'
                   ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
