@@ -1,3 +1,26 @@
+/**
+ * Meeting Selector Component for Socialing Seat Assigner
+ * 
+ * 모임 선택 및 관리 인터페이스를 제공하는 컴포넌트입니다.
+ * 사용자가 로그인한 후, 메인 앱에 진입하기 전에 표시되며
+ * 기존 모임 선택 또는 새 모임 생성을 할 수 있습니다.
+ * 
+ * 주요 기능:
+ * 1. 새 모임 생성 - 모임 이름을 입력하여 새로운 모임 시작
+ * 2. 기존 모임 선택 - 사용자의 모임 목록에서 선택
+ * 3. 모임 관리 - 이름 변경, 삭제 (완전 삭제 주의)
+ * 4. 정렬 기능 - 이름, 생성일, 수정일 기준 정렬
+ * 
+ * 데이터 흐름:
+ * Auth → MeetingSelector → Main App
+ * 
+ * 사용자 경험:
+ * - 직관적인 카드 형태의 모임 선택 UI
+ * - 실시간 검색 및 정렬 기능
+ * - 위험한 삭제 작업에 대한 명확한 경고
+ * - 반응형 디자인 (모바일 대응)
+ */
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -5,22 +28,43 @@ import { createSupabaseClient } from '@/lib/supabase'
 import { getUserMeetings, startNewMeeting, selectMeeting, getCurrentMeetingId, deleteMeeting, updateMeetingName, type Meeting } from '@/utils/database'
 import type { User } from '@supabase/supabase-js'
 
+/**
+ * MeetingSelector 컴포넌트의 Props 인터페이스
+ * @interface MeetingSelectorProps
+ * @property {User} user - 인증된 Supabase 사용자 객체
+ * @property {() => void} onMeetingSelected - 모임 선택 완료 시 호출될 콜백 함수
+ */
 interface MeetingSelectorProps {
   user: User
   onMeetingSelected: () => void
 }
 
+/**
+ * 모임 선택기 메인 컴포넌트
+ * 
+ * @param {MeetingSelectorProps} props - 컴포넌트 props
+ * @param {User} props.user - 인증된 사용자 정보
+ * @param {() => void} props.onMeetingSelected - 모임 선택 완료 콜백
+ * @returns {JSX.Element} 모임 선택 및 관리 UI
+ */
 export default function MeetingSelector({ user, onMeetingSelected }: MeetingSelectorProps) {
-  const [meetings, setMeetings] = useState<Meeting[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showNewMeetingForm, setShowNewMeetingForm] = useState(false)
-  const [newMeetingName, setNewMeetingName] = useState('')
-  const [creatingMeeting, setCreatingMeeting] = useState(false)
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
-  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'created_at' | 'updated_at'>('updated_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  // 상태 관리
+  const [meetings, setMeetings] = useState<Meeting[]>([])                        // 사용자의 모임 목록
+  const [loading, setLoading] = useState(true)                                  // 모임 목록 로딩 상태
+  
+  // 새 모임 생성 관련 상태
+  const [showNewMeetingForm, setShowNewMeetingForm] = useState(false)          // 새 모임 폼 표시 여부
+  const [newMeetingName, setNewMeetingName] = useState('')                     // 새 모임 이름 입력값
+  const [creatingMeeting, setCreatingMeeting] = useState(false)                // 모임 생성 중 로딩 상태
+  
+  // 모임 선택 및 편집 관련 상태
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)  // 현재 선택된 모임 ID
+  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null)    // 편집 중인 모임 ID
+  const [editingName, setEditingName] = useState('')                               // 편집 중인 모임 이름
+  
+  // 정렬 관련 상태
+  const [sortBy, setSortBy] = useState<'name' | 'created_at' | 'updated_at'>('updated_at')  // 정렬 기준
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')                        // 정렬 순서
 
   useEffect(() => {
     loadMeetings()

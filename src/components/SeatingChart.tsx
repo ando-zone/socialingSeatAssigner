@@ -1,8 +1,42 @@
+/**
+ * Seating Chart Component for Socialing Seat Assigner
+ * 
+ * 그룹 배치 결과를 시각적인 좌석 배치도로 표시하는 컴포넌트입니다.
+ * SVG를 사용하여 실제 모임 장소에서 사용할 수 있는 테이블 배치도를
+ * 생성하며, 인쇄 기능도 지원합니다.
+ * 
+ * 주요 기능:
+ * 1. 테이블 자동 배치 - 그룹 수에 따른 최적 테이블 레이아웃
+ * 2. 좌석 위치 계산 - 그룹 크기별 맞춤형 좌석 배치 알고리즘
+ * 3. 시각적 차별화 - 성별에 따른 색상 구분 (남성: 파랑, 여성: 분홍)
+ * 4. 인쇄 최적화 - 프린트 친화적인 레이아웃 및 스타일
+ * 5. 참가자 찾기 - 가나다순 정렬된 참가자 목록과 테이블 번호 매핑
+ * 
+ * 테이블 배치 알고리즘:
+ * - 정사각형에 가까운 그리드 형태로 테이블 배치
+ * - 각 테이블은 적절한 간격을 두고 배치 (통로 확보)
+ * - 그룹 크기에 따라 좌석을 테이블 둘레에 최적 배치
+ * 
+ * 좌석 배치 로직:
+ * - 2명: 상하 배치 (마주보기)
+ * - 4명: 사방향 배치 (정사각형)
+ * - 6명: 상하 각 2명 + 좌우 각 1명
+ * - 8명: 상하 각 3명 + 좌우 각 1명
+ */
+
 'use client'
 
 import React from 'react'
 import type { Group, Participant } from '@/utils/grouping'
 
+/**
+ * 개별 좌석의 위치와 방향 정보
+ * @interface SeatPosition
+ * @property {number} x - 테이블 기준 x 좌표
+ * @property {number} y - 테이블 기준 y 좌표
+ * @property {number} angle - 좌석의 회전 각도 (의자 방향)
+ * @property {'top' | 'bottom' | 'left' | 'right'} side - 테이블의 어느 쪽에 위치하는지
+ */
 interface SeatPosition {
   x: number
   y: number
@@ -10,6 +44,16 @@ interface SeatPosition {
   side: 'top' | 'bottom' | 'left' | 'right'
 }
 
+/**
+ * 개별 테이블의 레이아웃 정보
+ * @interface TableLayout
+ * @property {number} id - 테이블 ID (그룹 ID와 매칭)
+ * @property {number} x - 캔버스 상의 x 좌표
+ * @property {number} y - 캔버스 상의 y 좌표
+ * @property {number} width - 테이블 너비
+ * @property {number} height - 테이블 높이
+ * @property {SeatPosition[]} seats - 해당 테이블의 좌석 배치 정보
+ */
 interface TableLayout {
   id: number
   x: number
@@ -19,32 +63,64 @@ interface TableLayout {
   seats: SeatPosition[]
 }
 
+/**
+ * SeatingChart 컴포넌트의 Props 인터페이스
+ * @interface SeatingChartProps
+ * @property {Group[]} groups - 그룹 배치 결과 데이터
+ * @property {Participant[]} participants - 전체 참가자 정보 (통계용)
+ * @property {() => void} [onPrint] - 인쇄 버튼 클릭 시 호출될 콜백 (선택적)
+ */
 interface SeatingChartProps {
   groups: Group[]
   participants: Participant[]
   onPrint?: () => void
 }
 
+/**
+ * 좌석 배치도 메인 컴포넌트
+ * 
+ * @param {SeatingChartProps} props - 컴포넌트 props
+ * @param {Group[]} props.groups - 배치된 그룹 목록
+ * @param {Participant[]} props.participants - 전체 참가자 목록
+ * @param {() => void} [props.onPrint] - 인쇄 콜백 함수
+ * @returns {JSX.Element} SVG 기반 좌석 배치도와 참가자 목록
+ */
 export default function SeatingChart({ groups, participants, onPrint }: SeatingChartProps) {
-  // 테이블당 최대 좌석 수 (사각 테이블 기준)
-  const SEATS_PER_TABLE = 8
-  const TABLE_WIDTH = 200
-  const TABLE_HEIGHT = 120
-  const MARGIN = 100
-  const SEAT_SIZE = 40
+  // 배치도 레이아웃 상수 정의
+  const SEATS_PER_TABLE = 8     // 테이블당 최대 좌석 수 (사각 테이블 기준)
+  const TABLE_WIDTH = 200       // 테이블 너비 (px)
+  const TABLE_HEIGHT = 120      // 테이블 높이 (px)
+  const MARGIN = 100           // 테이블 간 여백 (px)
+  const SEAT_SIZE = 40         // 좌석(의자) 크기 (px)
 
-  // 그룹 크기에 따른 좌석 배치 생성
+  /**
+   * 그룹 크기에 따른 좌석 배치 생성 알고리즘
+   * 
+   * 테이블 둘레에 그룹 멤버 수만큼 좌석을 최적 배치합니다.
+   * 좌석 간 간격과 대화하기 좋은 거리를 고려하여 설계되었습니다.
+   * 
+   * 배치 전략:
+   * - 2명: 마주보기 (상하)로 배치하여 대화에 집중
+   * - 4명: 사방향 배치로 균형잡힌 그룹 대화 가능
+   * - 6명: 장축 방향(상하)에 더 많이 배치하여 안정적인 구조
+   * - 8명: 최대 수용 인원으로 테이블 둘레 최대 활용
+   * 
+   * @param {number} memberCount - 그룹 멤버 수 (1-8명)
+   * @returns {SeatPosition[]} 계산된 좌석 위치 배열
+   */
   const generateSeatPositions = (memberCount: number): SeatPosition[] => {
     const seats: SeatPosition[] = []
     
     if (memberCount <= 2) {
-      // 2명: 위아래
+      // 2명: 위아래 (마주보기 배치)
+      // 친밀한 대화가 가능한 최적 배치
       seats.push({ x: TABLE_WIDTH / 2, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       if (memberCount > 1) {
         seats.push({ x: TABLE_WIDTH / 2, y: TABLE_HEIGHT + SEAT_SIZE / 2, angle: 180, side: 'bottom' })
       }
     } else if (memberCount <= 4) {
-      // 4명: 상하좌우
+      // 4명: 상하좌우 (정사각형 배치)
+      // 모든 멤버가 서로를 쉽게 볼 수 있는 균형잡힌 구조
       seats.push({ x: TABLE_WIDTH / 2, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       seats.push({ x: TABLE_WIDTH / 2, y: TABLE_HEIGHT + SEAT_SIZE / 2, angle: 180, side: 'bottom' })
       if (memberCount > 2) {
@@ -55,6 +131,7 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
       }
     } else if (memberCount <= 6) {
       // 6명: 위2, 아래2, 좌우1씩
+      // 장축을 활용한 안정적인 그룹 구성
       seats.push({ x: TABLE_WIDTH * 0.3, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       seats.push({ x: TABLE_WIDTH * 0.7, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       seats.push({ x: TABLE_WIDTH * 0.3, y: TABLE_HEIGHT + SEAT_SIZE / 2, angle: 180, side: 'bottom' })
@@ -66,7 +143,8 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
         seats.push({ x: TABLE_WIDTH + SEAT_SIZE / 2, y: TABLE_HEIGHT / 2, angle: -90, side: 'right' })
       }
     } else {
-      // 8명: 위3, 아래3, 좌우1씩
+      // 8명: 위3, 아래3, 좌우1씩 (최대 수용)
+      // 테이블 둘레를 최대 활용한 대규모 그룹 배치
       seats.push({ x: TABLE_WIDTH * 0.2, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       seats.push({ x: TABLE_WIDTH * 0.5, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
       seats.push({ x: TABLE_WIDTH * 0.8, y: -SEAT_SIZE / 2, angle: 0, side: 'top' })
@@ -81,18 +159,36 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
       }
     }
     
+    // 실제 멤버 수만큼만 반환 (안전장치)
     return seats.slice(0, memberCount)
   }
 
-  // 테이블 레이아웃 계산
+  /**
+   * 테이블 레이아웃 계산 알고리즘
+   * 
+   * 그룹 수에 따라 테이블을 격자형으로 배치합니다.
+   * 정사각형에 가까운 배치를 만들어 공간을 효율적으로 사용하며,
+   * 각 테이블 사이에는 충분한 여백을 두어 이동 통로를 확보합니다.
+   * 
+   * 배치 전략:
+   * - √그룹수에 가까운 행 수로 격자 구성
+   * - 각 테이블 간 일정한 간격 유지 (MARGIN * 2)
+   * - 좌석까지 고려한 실제 필요 공간 계산
+   * 
+   * @returns {TableLayout[]} 각 테이블의 위치와 좌석 정보를 담은 배열
+   */
   const calculateTableLayouts = (): TableLayout[] => {
     const layouts: TableLayout[] = []
+    // 정사각형에 가까운 그리드 생성 (예: 9개 → 3x3, 10개 → 4x3)
     const tablesPerRow = Math.ceil(Math.sqrt(groups.length))
     
     groups.forEach((group, index) => {
-      const row = Math.floor(index / tablesPerRow)
-      const col = index % tablesPerRow
+      // 격자 좌표 계산
+      const row = Math.floor(index / tablesPerRow)  // 행 번호
+      const col = index % tablesPerRow              // 열 번호
       
+      // 실제 캔버스 상의 픽셀 좌표 계산
+      // 각 테이블은 테이블 크기 + 여백*2 만큼의 공간을 차지
       const x = col * (TABLE_WIDTH + MARGIN * 2) + MARGIN
       const y = row * (TABLE_HEIGHT + MARGIN * 2) + MARGIN
       
@@ -102,16 +198,18 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
         y,
         width: TABLE_WIDTH,
         height: TABLE_HEIGHT,
-        seats: generateSeatPositions(group.members.length)
+        seats: generateSeatPositions(group.members.length)  // 그룹 크기별 좌석 배치
       })
     })
     
     return layouts
   }
 
+  // 모든 테이블의 레이아웃 정보 계산
   const tableLayouts = calculateTableLayouts()
   
   // 전체 캔버스 크기 계산
+  // 가장 오른쪽 테이블과 가장 아래쪽 테이블을 기준으로 전체 크기 결정
   const canvasWidth = Math.max(...tableLayouts.map(t => t.x + t.width)) + MARGIN
   const canvasHeight = Math.max(...tableLayouts.map(t => t.y + t.height)) + MARGIN
 
