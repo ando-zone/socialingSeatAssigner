@@ -289,11 +289,12 @@ function assignParticipantsWithGenderConstraints(
   
   // 3단계: 실현 가능성 검증
   if (maleParticipants.length < totalMaleNeeded || femaleParticipants.length < totalFemaleNeeded) {
-    return { 
-      success: false, 
-      reason: `성별 참가자 수 부족 - 남성: ${maleParticipants.length}/${totalMaleNeeded}, 여성: ${femaleParticipants.length}/${totalFemaleNeeded}`
-    }
+    const reason = `성별 참가자 수 부족 - 남성: ${maleParticipants.length}/${totalMaleNeeded}, 여성: ${femaleParticipants.length}/${totalFemaleNeeded}`
+    console.error('❌ 성비 제약 조건 검증 실패:', reason)
+    return { success: false, reason }
   }
+  
+  console.log('✅ 성비 제약 조건 검증 통과 - 배치 시작')
   
   // 4단계: 그룹별 성별 제약 조건에 따른 순차 배치
   const assignedMales = new Set<string>()    // 이미 배치된 남성 참가자 ID 추적
@@ -324,6 +325,7 @@ function assignParticipantsWithGenderConstraints(
     console.log(`그룹 ${groupIndex + 1} 배치 완료: 남성 ${selectedMales.length}명, 여성 ${selectedFemales.length}명 (목표: ${constraint.maleCount}/${constraint.femaleCount})`)
   }
   
+  console.log('✅ 모든 그룹 성비 제약 조건 배치 완료')
   return { success: true }
 }
 
@@ -499,11 +501,11 @@ export function createOptimalGroups(
 
   // 8단계: 새로운 만남 최적화 (특히 새로운 이성과의 만남 우선)
   console.log('🔄 새로운 만남 최적화 시작...')
-  optimizeNewMeetings(groups, participants, currentRound)
+  optimizeNewMeetings(groups, participants, currentRound, genderConstraints)
   
   // 9단계: 그룹 구조적 균형 최적화 (크기 및 성별 균형)
   console.log('⚖️ 그룹 균형 최적화 시작...')
-  optimizeGroupBalance(groups, groupSizes)
+  optimizeGroupBalance(groups, groupSizes, genderConstraints)
 
   console.log('🎉 모든 최적화 완료:', groups.map(g => g.length))
 
@@ -637,7 +639,7 @@ export function createOptimalGroups(
  * 
  * 이 함수는 초기 배치 후 품질을 더욱 높이는 후처리 단계입니다.
  */
-function optimizeNewMeetings(groups: Participant[][], participants: Participant[], currentRound: number) {
+function optimizeNewMeetings(groups: Participant[][], participants: Participant[], currentRound: number, genderConstraints?: GenderConstraint[]) {
   const maxIterations = 100  // 무한 루프 방지를 위한 최대 반복 횟수
   
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -661,6 +663,12 @@ function optimizeNewMeetings(groups: Participant[][], participants: Participant[
             // 교환 전 새로운 만남 점수 계산 (현재 상태)
             const oldScore = calculateNewMeetingScore(group1, currentRound) + 
                            calculateNewMeetingScore(group2, currentRound)
+            
+            // 성별 제약이 있는 경우 교환이 제약을 위반하는지 확인
+            if (genderConstraints && wouldViolateGenderConstraints(groups, i, j, p1, p2, genderConstraints)) {
+              // 성별 제약을 위반하므로 이 교환은 건너뜀
+              continue
+            }
             
             // 임시 교환 실행 (시뮬레이션)
             group1[p1] = person2
@@ -693,6 +701,59 @@ function optimizeNewMeetings(groups: Participant[][], participants: Participant[
     // 이번 iteration에서 아무 개선이 없었다면 최적화 완료
     if (!improved) break
   }
+}
+
+/**
+ * 참가자 교환이 성별 제약 조건을 위반하는지 확인합니다.
+ * 
+ * @param groups - 전체 그룹 배열
+ * @param group1Index - 첫 번째 그룹 인덱스
+ * @param group2Index - 두 번째 그룹 인덱스
+ * @param p1Index - 첫 번째 그룹에서 교환할 참가자 인덱스
+ * @param p2Index - 두 번째 그룹에서 교환할 참가자 인덱스
+ * @param genderConstraints - 성별 제약 조건 배열
+ * @returns 제약을 위반하면 true, 그렇지 않으면 false
+ */
+function wouldViolateGenderConstraints(
+  groups: Participant[][],
+  group1Index: number,
+  group2Index: number,
+  p1Index: number,
+  p2Index: number,
+  genderConstraints: GenderConstraint[]
+): boolean {
+  const group1 = groups[group1Index]
+  const group2 = groups[group2Index]
+  const person1 = group1[p1Index]
+  const person2 = group2[p2Index]
+  
+  // 교환 후 각 그룹의 성별 구성 시뮬레이션
+  const group1AfterSwap = [...group1]
+  const group2AfterSwap = [...group2]
+  group1AfterSwap[p1Index] = person2
+  group2AfterSwap[p2Index] = person1
+  
+  // 각 그룹이 제약 조건을 만족하는지 확인
+  const constraint1 = genderConstraints[group1Index]
+  const constraint2 = genderConstraints[group2Index]
+  
+  if (!constraint1 || !constraint2) {
+    return false // 제약 조건이 없으면 위반이 아님
+  }
+  
+  // 교환 후 그룹1의 성별 구성 확인
+  const group1Males = group1AfterSwap.filter(p => p.gender === 'male').length
+  const group1Females = group1AfterSwap.filter(p => p.gender === 'female').length
+  
+  // 교환 후 그룹2의 성별 구성 확인
+  const group2Males = group2AfterSwap.filter(p => p.gender === 'male').length
+  const group2Females = group2AfterSwap.filter(p => p.gender === 'female').length
+  
+  // 제약 조건 위반 여부 확인
+  const violatesGroup1 = group1Males !== constraint1.maleCount || group1Females !== constraint1.femaleCount
+  const violatesGroup2 = group2Males !== constraint2.maleCount || group2Females !== constraint2.femaleCount
+  
+  return violatesGroup1 || violatesGroup2
 }
 
 /**
@@ -774,7 +835,7 @@ function calculateNewMeetingScore(group: Participant[], currentRound: number): n
  * - 참가자 교환 시 기존 만남 기록은 고려하지 않음
  * - 따라서 optimizeNewMeetings() 이후에 실행되어야 함
  */
-function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[]) {
+function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[], genderConstraints?: GenderConstraint[]) {
   const maxIterations = 50  // 성능 고려한 적절한 반복 횟수
   
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -801,68 +862,72 @@ function optimizeGroupBalance(groups: Participant[][], targetGroupSizes: number[
       }
     }
     
-    // 2단계: 성별 균형 개선을 위한 참가자 교환
-    for (let i = 0; i < groups.length; i++) {
-      for (let j = i + 1; j < groups.length; j++) {
-        const group1 = groups[i]
-        const group2 = groups[j]
-        
-        // 빈 그룹 건너뜀
-        if (group1.length === 0 || group2.length === 0) continue
-        
-        // 각 그룹의 현재 성별 구성 계산
-        const g1Males = group1.filter(p => p.gender === 'male').length
-        const g1Females = group1.filter(p => p.gender === 'female').length
-        const g2Males = group2.filter(p => p.gender === 'male').length
-        const g2Females = group2.filter(p => p.gender === 'female').length
-        
-        // 성별 불균형이 심한 경우에만 교환 시도 (1명 초과 차이)
-        if (Math.abs(g1Males - g1Females) > 1 || Math.abs(g2Males - g2Females) > 1) {
-          // 두 그룹 간 모든 참가자 쌍에 대해 교환 시뮬레이션
-          for (let p1 = 0; p1 < group1.length; p1++) {
-            for (let p2 = 0; p2 < group2.length; p2++) {
-              // 다른 성별끼리만 교환 (성별 균형 개선 효과)
-              if (group1[p1].gender !== group2[p2].gender) {
-                // 교환 전 불균형 정도 계산
-                const oldBalance1 = Math.abs(g1Males - g1Females)
-                const oldBalance2 = Math.abs(g2Males - g2Females)
-                const oldTotalBalance = oldBalance1 + oldBalance2
-                
-                // 임시 교환 실행
-                const temp = group1[p1]
-                group1[p1] = group2[p2]
-                group2[p2] = temp
-                
-                // 교환 후 새로운 성별 구성 계산
-                const newG1Males = group1.filter(p => p.gender === 'male').length
-                const newG1Females = group1.filter(p => p.gender === 'female').length
-                const newG2Males = group2.filter(p => p.gender === 'male').length
-                const newG2Females = group2.filter(p => p.gender === 'female').length
-                
-                // 교환 후 불균형 정도 계산
-                const newBalance1 = Math.abs(newG1Males - newG1Females)
-                const newBalance2 = Math.abs(newG2Males - newG2Females)
-                const newTotalBalance = newBalance1 + newBalance2
-                
-                if (newTotalBalance < oldTotalBalance) {
-                  // 전체 균형이 개선되었으므로 교환 유지
-                  improved = true
-                  break
-                } else {
-                  // 개선되지 않았으므로 원상복구
-                  const temp2 = group1[p1]
+    // 2단계: 성별 균형 개선을 위한 참가자 교환 (성별 제약이 없는 경우에만)
+    if (!genderConstraints) {
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const group1 = groups[i]
+          const group2 = groups[j]
+          
+          // 빈 그룹 건너뜀
+          if (group1.length === 0 || group2.length === 0) continue
+          
+          // 각 그룹의 현재 성별 구성 계산
+          const g1Males = group1.filter(p => p.gender === 'male').length
+          const g1Females = group1.filter(p => p.gender === 'female').length
+          const g2Males = group2.filter(p => p.gender === 'male').length
+          const g2Females = group2.filter(p => p.gender === 'female').length
+          
+          // 성별 불균형이 심한 경우에만 교환 시도 (1명 초과 차이)
+          if (Math.abs(g1Males - g1Females) > 1 || Math.abs(g2Males - g2Females) > 1) {
+            // 두 그룹 간 모든 참가자 쌍에 대해 교환 시뮬레이션
+            for (let p1 = 0; p1 < group1.length; p1++) {
+              for (let p2 = 0; p2 < group2.length; p2++) {
+                // 다른 성별끼리만 교환 (성별 균형 개선 효과)
+                if (group1[p1].gender !== group2[p2].gender) {
+                  // 교환 전 불균형 정도 계산
+                  const oldBalance1 = Math.abs(g1Males - g1Females)
+                  const oldBalance2 = Math.abs(g2Males - g2Females)
+                  const oldTotalBalance = oldBalance1 + oldBalance2
+                  
+                  // 임시 교환 실행
+                  const temp = group1[p1]
                   group1[p1] = group2[p2]
-                  group2[p2] = temp2
+                  group2[p2] = temp
+                  
+                  // 교환 후 새로운 성별 구성 계산
+                  const newG1Males = group1.filter(p => p.gender === 'male').length
+                  const newG1Females = group1.filter(p => p.gender === 'female').length
+                  const newG2Males = group2.filter(p => p.gender === 'male').length
+                  const newG2Females = group2.filter(p => p.gender === 'female').length
+                  
+                  // 교환 후 불균형 정도 계산
+                  const newBalance1 = Math.abs(newG1Males - newG1Females)
+                  const newBalance2 = Math.abs(newG2Males - newG2Females)
+                  const newTotalBalance = newBalance1 + newBalance2
+                  
+                  if (newTotalBalance < oldTotalBalance) {
+                    // 전체 균형이 개선되었으므로 교환 유지
+                    improved = true
+                    break
+                  } else {
+                    // 개선되지 않았으므로 원상복구
+                    const temp2 = group1[p1]
+                    group1[p1] = group2[p2]
+                    group2[p2] = temp2
+                  }
                 }
               }
+              // 성별 균형에서 개선이 발견되면 중단하고 다음 iteration으로
+              if (improved) break
             }
-            // 성별 균형에서 개선이 발견되면 중단하고 다음 iteration으로
-            if (improved) break
           }
+          if (improved) break
         }
         if (improved) break
       }
-      if (improved) break
+    } else {
+      console.log('🔒 성별 제약 조건이 설정되어 있어 성별 균형 최적화를 건너뜁니다.')
     }
     
     // 전체 최적화에서 개선이 없었다면 최적화 완료
