@@ -1482,8 +1482,8 @@ export default function ResultPage() {
                       }
 
                       // 테이블 렌더링 함수
-                      const renderTable = (participants: any[], title: string, titleColor: string, bgColor: string, tableId: string) => (
-                        <div id={tableId} className="bg-white rounded-lg shadow-md p-6">
+                      const renderTable = (participants: any[], title: string, titleColor: string, bgColor: string, tableId: string, tableBgColor: string) => (
+                        <div id={tableId} className={`${tableBgColor} rounded-lg shadow-md p-6 border-2 ${tableId === 'male-table' ? 'border-blue-200' : 'border-red-200'}`}>
                           <h3 className="text-lg font-semibold mb-4 flex items-center">
                             <span className={`${titleColor} mr-2`}>👥</span>
                             {title} ({participants.length}명)
@@ -1793,10 +1793,10 @@ export default function ResultPage() {
                       return (
                         <div className="space-y-6">
                           {/* 남성 테이블 */}
-                          {renderTable(maleParticipants, '남성 참가자', 'text-blue-500', 'bg-blue-50', 'male-table')}
+                          {renderTable(maleParticipants, '남성 참가자', 'text-blue-700', 'bg-blue-50', 'male-table', 'bg-blue-50')}
                           
                           {/* 여성 테이블 */}
-                          {renderTable(femaleParticipants, '여성 참가자', 'text-red-500', 'bg-red-50', 'female-table')}
+                          {renderTable(femaleParticipants, '여성 참가자', 'text-red-700', 'bg-red-50', 'female-table', 'bg-red-50')}
                         </div>
                       )
                     })()}
