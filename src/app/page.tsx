@@ -1,3 +1,36 @@
+/**
+ * Main Home Page Component for Socialing Seat Assigner
+ * 
+ * 모임 자리 배치 프로그램의 메인 페이지입니다.
+ * 참가자 관리, 그룹 설정, 배치 실행 등 모든 핵심 기능을 제공합니다.
+ * 
+ * 주요 기능:
+ * 1. 참가자 관리 - 개별 추가, 벌크 추가, 수정, 삭제
+ * 2. 그룹 배치 설정 - 자동/수동 모드, 그룹 크기, 성비 제약
+ * 3. 배치 실행 - 최적화된 알고리즘으로 그룹 생성
+ * 4. 데이터 백업/복원 - 스냅샷 및 JSON 내보내기/가져오기
+ * 5. 실시간 상태 관리 - Supabase와 LocalStorage 동기화
+ * 
+ * 배치 모드:
+ * - 자동 모드: 동일한 크기의 그룹으로 자동 분배
+ * - 수동 모드: 각 그룹별 크기와 성비를 개별 설정
+ * 
+ * 데이터 흐름:
+ * Home → Grouping Algorithm → Result Page
+ * 
+ * 상태 관리:
+ * - 참가자 정보 (이름, 성별, MBTI, 만남 히스토리)
+ * - 그룹 설정 (모드, 크기, 성비 제약)
+ * - UI 상태 (로딩, 폼 표시, 에러 메시지)
+ * - 백업 데이터 (스냅샷, 복원 지점)
+ * 
+ * 알고리즘 최적화:
+ * - 이전 만남 최소화 (중복 방지)
+ * - 성별 균형 유지 (설정 가능)
+ * - MBTI 균형 고려 (외향형/내향형)
+ * - 그룹 크기 균등화 (자동 모드)
+ */
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -5,32 +38,46 @@ import { useRouter } from 'next/navigation'
 import { createOptimalGroups, updateMeetingHistory, migrateParticipantData, type Participant, type GroupingResult, type GenderConstraint } from '@/utils/grouping'
 import { createSnapshot, exportToJSON, importFromJSON, getSnapshots, restoreSnapshot, formatDateTime } from '@/utils/backup'
 
+/**
+ * 메인 홈 페이지 컴포넌트
+ * 모든 모임 관리 기능의 중심이 되는 페이지입니다.
+ * 
+ * @returns {JSX.Element} 참가자 관리와 그룹 배치 설정 UI
+ */
 export default function Home() {
   const router = useRouter()
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [name, setName] = useState('')
-  const [gender, setGender] = useState<'male' | 'female'>('male')
-  const [mbti, setMbti] = useState<'extrovert' | 'introvert'>('extrovert')
-  const [currentRound, setCurrentRound] = useState(1)
-  const [groupSize, setGroupSize] = useState(4)
-  const [isLoading, setIsLoading] = useState(false)
-  const [groupingMode, setGroupingMode] = useState<'auto' | 'manual'>('manual')
-  const [numGroups, setNumGroups] = useState(6)
-  const [customGroupSizes, setCustomGroupSizes] = useState<number[]>([12, 12, 12, 12, 12, 12])
+  
+  // 참가자 관리 상태
+  const [participants, setParticipants] = useState<Participant[]>([])           // 전체 참가자 목록
+  const [name, setName] = useState('')                                         // 새 참가자 이름 입력
+  const [gender, setGender] = useState<'male' | 'female'>('male')              // 새 참가자 성별
+  const [mbti, setMbti] = useState<'extrovert' | 'introvert'>('extrovert')     // 새 참가자 MBTI
+  
+  // 라운드 및 그룹 설정 상태
+  const [currentRound, setCurrentRound] = useState(1)                          // 현재 라운드 번호
+  const [groupSize, setGroupSize] = useState(4)                               // 자동 모드 시 그룹 크기
+  const [isLoading, setIsLoading] = useState(false)                           // 배치 실행 중 로딩 상태
+  
+  // 배치 모드 및 설정
+  const [groupingMode, setGroupingMode] = useState<'auto' | 'manual'>('manual')  // 배치 모드 (자동/수동)
+  const [numGroups, setNumGroups] = useState(6)                                  // 수동 모드: 총 그룹 수
+  const [customGroupSizes, setCustomGroupSizes] = useState<number[]>([12, 12, 12, 12, 12, 12])  // 수동 모드: 각 그룹 크기
   const [customGroupGenders, setCustomGroupGenders] = useState<{maleCount: number, femaleCount: number}[]>([
     {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, 
     {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}, {maleCount: 7, femaleCount: 5}
-  ])
-  const [enableGenderRatio, setEnableGenderRatio] = useState(false)
-  const [groupSettingsLoaded, setGroupSettingsLoaded] = useState(false)
-  const [bulkText, setBulkText] = useState('')
-  const [showBulkInput, setShowBulkInput] = useState(false)
-  const [showBackupSection, setShowBackupSection] = useState(false)
-  const [snapshots, setSnapshots] = useState<any[]>([])
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [hasExistingResult, setHasExistingResult] = useState(false)
-  const [isClient, setIsClient] = useState(false)
-  const [currentMeeting, setCurrentMeeting] = useState<any>(null)
+  ])  // 수동 모드: 각 그룹별 성비 설정
+  const [enableGenderRatio, setEnableGenderRatio] = useState(false)              // 성비 제약 활성화 여부
+  const [groupSettingsLoaded, setGroupSettingsLoaded] = useState(false)         // 그룹 설정 로드 완료 여부
+  
+  // UI 상태 관리
+  const [bulkText, setBulkText] = useState('')                    // 벌크 입력 텍스트
+  const [showBulkInput, setShowBulkInput] = useState(false)       // 벌크 입력 폼 표시 여부
+  const [showBackupSection, setShowBackupSection] = useState(false)  // 백업 섹션 표시 여부
+  const [snapshots, setSnapshots] = useState<any[]>([])           // 백업 스냅샷 목록
+  const [isInitialLoad, setIsInitialLoad] = useState(true)        // 초기 데이터 로드 상태
+  const [hasExistingResult, setHasExistingResult] = useState(false)  // 기존 배치 결과 존재 여부
+  const [isClient, setIsClient] = useState(false)                 // 클라이언트 렌더링 확인
+  const [currentMeeting, setCurrentMeeting] = useState<any>(null) // 현재 활성 모임 정보
 
   const addParticipant = async () => {
     if (name.trim()) {

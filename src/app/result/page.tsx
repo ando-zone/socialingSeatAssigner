@@ -1,3 +1,38 @@
+/**
+ * Result Page Component for Socialing Seat Assigner
+ * 
+ * 그룹 배치 결과를 표시하고 실시간 수정이 가능한 결과 페이지입니다.
+ * 배치 완료 후 참가자를 추가/삭제/이동하며 최적화된 결과를 만들어갑니다.
+ * 
+ * 주요 기능:
+ * 1. 그룹 배치 결과 시각화 - 그룹별 멤버와 통계 표시
+ * 2. 실시간 참가자 관리 - 추가, 삭제, 정보 수정
+ * 3. 동적 위치 변경 - 드래그&드롭 또는 터치로 참가자 이동
+ * 4. 통계 실시간 재계산 - 성별/MBTI 균형, 새로운 만남 수 자동 업데이트
+ * 5. 좌석 배치도 생성 - 실제 좌석 배치를 위한 시각적 가이드
+ * 6. 상세 참가자 분석 - 개인별 만남 히스토리와 통계
+ * 
+ * 탭 구성:
+ * - 그룹 결과: 배치 결과와 실시간 편집 기능
+ * - 좌석 배치도: 실제 모임에서 사용할 테이블 배치 가이드
+ * - 참가자 통계: 개인별 만남 분포와 히스토리 상세 분석
+ * 
+ * 상호작용 방식:
+ * - 데스크톱: 드래그&드롭으로 참가자 위치 변경
+ * - 모바일: 터치로 참가자 선택 후 교체 대상 터치
+ * - 인라인 편집: 각 참가자의 이름, 성별, MBTI 실시간 수정
+ * 
+ * 데이터 일관성:
+ * - 모든 변경사항은 실시간으로 통계에 반영
+ * - 그룹 히스토리와 만남 기록 자동 업데이트
+ * - Supabase 실시간 동기화로 데이터 영구 보존
+ * 
+ * 알고리즘 재계산:
+ * - 성별/MBTI 균형 점수 실시간 계산
+ * - 새로운 만남 수 동적 업데이트
+ * - 이전 라운드 만남 기록과 비교하여 중복 최소화
+ */
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,29 +42,47 @@ import { migrateParticipantData } from '@/utils/grouping'
 import { createSnapshot } from '@/utils/backup'
 import SeatingChart from '@/components/SeatingChart'
 
+/**
+ * 그룹 배치 결과 페이지 메인 컴포넌트
+ * 
+ * 배치 완료된 그룹을 관리하고 실시간으로 수정할 수 있는 
+ * 인터랙티브한 결과 페이지를 제공합니다.
+ * 
+ * @returns {JSX.Element} 그룹 결과 관리 및 통계 UI
+ */
 export default function ResultPage() {
   const router = useRouter()
-  const [result, setResult] = useState<GroupingResult | null>(null)
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [exitedParticipants, setExitedParticipants] = useState<{[id: string]: {name: string, gender: 'male' | 'female'}}>({}) // 이탈한 사람들 정보
-  const [showAddForm, setShowAddForm] = useState<number | null>(null) // 어느 그룹에 추가할지
+  
+  // 핵심 데이터 상태
+  const [result, setResult] = useState<GroupingResult | null>(null)        // 그룹 배치 결과
+  const [participants, setParticipants] = useState<Participant[]>([])       // 현재 참가자 목록
+  const [exitedParticipants, setExitedParticipants] = useState<{[id: string]: {name: string, gender: 'male' | 'female'}}>({}) // 이탈한 참가자 정보
+  
+  // 참가자 추가 관련 상태
+  const [showAddForm, setShowAddForm] = useState<number | null>(null)       // 추가 폼을 표시할 그룹 ID
   const [newParticipant, setNewParticipant] = useState({
     name: '',
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
-  })
-  const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)
-  const [swapMessage, setSwapMessage] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>('groups')
-  const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)
-  const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)
-  const [isMobile, setIsMobile] = useState(false)
-  const [editingParticipant, setEditingParticipant] = useState<string | null>(null)
+  })  // 새 참가자 정보
+  
+  // 드래그&드롭 및 위치 변경 상태
+  const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)  // 드래그 중인 참가자
+  const [swapMessage, setSwapMessage] = useState<string | null>(null)       // 위치 변경 성공/실패 메시지
+  const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)  // 터치용 선택된 참가자
+  
+  // UI 상태 관리
+  const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>('groups')  // 현재 활성 탭
+  const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)   // 통계 탭에서 선택된 참가자
+  const [isMobile, setIsMobile] = useState(false)                          // 모바일 환경 감지
+  
+  // 참가자 편집 상태
+  const [editingParticipant, setEditingParticipant] = useState<string | null>(null)     // 편집 중인 참가자 ID
   const [editForm, setEditForm] = useState({
     name: '',
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
-  })
+  })  // 편집 폼 데이터
 
   useEffect(() => {
     const loadData = async () => {
