@@ -1,9 +1,9 @@
 /**
  * Result Page Component for Socialing Seat Assigner
- * 
+ *
  * 그룹 배치 결과를 표시하고 실시간 수정이 가능한 결과 페이지입니다.
  * 배치 완료 후 참가자를 추가/삭제/이동하며 최적화된 결과를 만들어갑니다.
- * 
+ *
  * 주요 기능:
  * 1. 그룹 배치 결과 시각화 - 그룹별 멤버와 통계 표시
  * 2. 실시간 참가자 관리 - 추가, 삭제, 정보 수정
@@ -11,22 +11,22 @@
  * 4. 통계 실시간 재계산 - 성별/MBTI 균형, 새로운 만남 수 자동 업데이트
  * 5. 좌석 배치도 생성 - 실제 좌석 배치를 위한 시각적 가이드
  * 6. 상세 참가자 분석 - 개인별 만남 히스토리와 통계
- * 
+ *
  * 탭 구성:
  * - 그룹 결과: 배치 결과와 실시간 편집 기능
  * - 좌석 배치도: 실제 모임에서 사용할 테이블 배치 가이드
  * - 참가자 통계: 개인별 만남 분포와 히스토리 상세 분석
- * 
+ *
  * 상호작용 방식:
  * - 데스크톱: 드래그&드롭으로 참가자 위치 변경
  * - 모바일: 터치로 참가자 선택 후 교체 대상 터치
  * - 인라인 편집: 각 참가자의 이름, 성별, MBTI 실시간 수정
- * 
+ *
  * 데이터 일관성:
  * - 모든 변경사항은 실시간으로 통계에 반영
  * - 그룹 히스토리와 만남 기록 자동 업데이트
  * - Supabase 실시간 동기화로 데이터 영구 보존
- * 
+ *
  * 알고리즘 재계산:
  * - 성별/MBTI 균형 점수 실시간 계산
  * - 새로운 만남 수 동적 업데이트
@@ -44,20 +44,20 @@ import SeatingChart from '@/components/SeatingChart'
 
 /**
  * 그룹 배치 결과 페이지 메인 컴포넌트
- * 
- * 배치 완료된 그룹을 관리하고 실시간으로 수정할 수 있는 
+ *
+ * 배치 완료된 그룹을 관리하고 실시간으로 수정할 수 있는
  * 인터랙티브한 결과 페이지를 제공합니다.
- * 
+ *
  * @returns {JSX.Element} 그룹 결과 관리 및 통계 UI
  */
 export default function ResultPage() {
   const router = useRouter()
-  
+
   // 핵심 데이터 상태
   const [result, setResult] = useState<GroupingResult | null>(null)        // 그룹 배치 결과
   const [participants, setParticipants] = useState<Participant[]>([])       // 현재 참가자 목록
   const [exitedParticipants, setExitedParticipants] = useState<{[id: string]: {name: string, gender: 'male' | 'female'}}>({}) // 이탈한 참가자 정보
-  
+
   // 참가자 추가 관련 상태
   const [showAddForm, setShowAddForm] = useState<number | null>(null)       // 추가 폼을 표시할 그룹 ID
   const [newParticipant, setNewParticipant] = useState({
@@ -65,12 +65,12 @@ export default function ResultPage() {
     gender: 'male' as 'male' | 'female',
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })  // 새 참가자 정보
-  
+
   // 드래그&드롭 및 위치 변경 상태
   const [draggedParticipant, setDraggedParticipant] = useState<{id: string, fromGroupId: number} | null>(null)  // 드래그 중인 참가자
   const [swapMessage, setSwapMessage] = useState<string | null>(null)       // 위치 변경 성공/실패 메시지
   const [swapSelectedParticipant, setSwapSelectedParticipant] = useState<{id: string, groupId: number} | null>(null)  // 터치용 선택된 참가자
-  
+
   // UI 상태 관리 - localStorage에서 탭 상태 복원
   const [activeTab, setActiveTab] = useState<'groups' | 'stats' | 'seating'>(() => {
     if (typeof window !== 'undefined') {
@@ -81,11 +81,11 @@ export default function ResultPage() {
   })  // 현재 활성 탭
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)   // 통계 탭에서 선택된 참가자
   const [isMobile, setIsMobile] = useState(false)                          // 모바일 환경 감지
-  
+
   // 참가자 테이블 정렬 상태
   const [sortBy, setSortBy] = useState<'name' | 'totalMet' | 'oppositeMet' | 'newInCurrentRound' | 'currentGroupId'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  
+
   // 참가자 편집 상태
   const [editingParticipant, setEditingParticipant] = useState<string | null>(null)     // 편집 중인 참가자 ID
   const [editForm, setEditForm] = useState({
@@ -104,7 +104,7 @@ export default function ResultPage() {
   const handleSort = (column: typeof sortBy, tableId?: string) => {
     // 정렬 전 스크롤 위치 저장
     const currentScrollY = window.scrollY
-    
+
     if (sortBy === column) {
       // 같은 칼럼을 다시 클릭하면 순서 변경
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -113,7 +113,7 @@ export default function ResultPage() {
       setSortBy(column)
       setSortOrder('asc')
     }
-    
+
     // 정렬 후 스크롤 위치 복원
     if (tableId) {
       setTimeout(() => {
@@ -133,13 +133,13 @@ export default function ResultPage() {
   const sortParticipants = (participants: any[]) => {
     return [...participants].sort((a, b) => {
       let aValue, bValue
-      
+
       switch (sortBy) {
         case 'name':
           aValue = a.name
           bValue = b.name
           // 문자열 정렬
-          return sortOrder === 'asc' 
+          return sortOrder === 'asc'
             ? aValue.localeCompare(bValue, 'ko')
             : bValue.localeCompare(aValue, 'ko')
         case 'totalMet':
@@ -161,7 +161,7 @@ export default function ResultPage() {
         default:
           return 0
       }
-      
+
       // 숫자 정렬
       return sortOrder === 'asc' ? aValue - bValue : bValue - aValue
     })
@@ -170,38 +170,38 @@ export default function ResultPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const { 
-          getGroupingResult, 
-          getParticipants, 
+        const {
+          getGroupingResult,
+          getParticipants,
           getExitedParticipants,
           getCurrentMeetingId
         } = await import('@/utils/database')
-        
+
         const meetingId = getCurrentMeetingId()
         if (!meetingId) {
           console.log('활성 모임이 없습니다.')
           router.push('/')
           return
         }
-        
+
         console.log('📥 결과 페이지 데이터 로딩 중...')
-        
+
         const [groupingResult, participants, exitedParticipants] = await Promise.all([
           getGroupingResult(),
           getParticipants(),
           getExitedParticipants()
         ])
-        
+
         if (groupingResult && participants.length > 0) {
           // 이탈한 사람들 정보 설정
           setExitedParticipants(exitedParticipants)
-          
+
           // 데이터 마이그레이션 적용
           const migratedParticipants = migrateParticipantData(participants, groupingResult.round || 1)
-          
+
           setResult(groupingResult)
           setParticipants(migratedParticipants)
-          
+
           console.log('✅ 결과 페이지 데이터 로드 완료')
         } else {
           console.log('그룹 배치 결과가 없습니다. 메인 페이지로 이동합니다.')
@@ -212,7 +212,7 @@ export default function ResultPage() {
         router.push('/')
       }
     }
-    
+
     loadData()
   }, [router])
 
@@ -221,38 +221,38 @@ export default function ResultPage() {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth <= 768 || 'ontouchstart' in window)
     }
-    
+
     checkIsMobile()
     window.addEventListener('resize', checkIsMobile)
-    
+
     return () => window.removeEventListener('resize', checkIsMobile)
   }, [])
 
   // 현재 라운드 만남 계산 (새로운 구조 사용)
   const getCurrentRoundMeetings = (participantId: string): string[] => {
     if (!result) return []
-    
+
     const participant = participants.find(p => p.id === participantId)
     const currentRound = result.round || 1
-    
+
     return participant?.meetingsByRound[currentRound] || []
   }
 
   // 이전 라운드들 만남 계산
   const getPreviousRoundsMeetings = (participantId: string): string[] => {
     if (!result) return []
-    
+
     const participant = participants.find(p => p.id === participantId)
     const currentRound = result.round || 1
     const previousMeetings = new Set<string>()
-    
+
     // 현재 라운드 이전의 모든 라운드에서 만난 사람들 수집
     Object.entries(participant?.meetingsByRound || {}).forEach(([round, meetings]) => {
       if (parseInt(round) < currentRound) {
         meetings.forEach(meetingId => previousMeetings.add(meetingId))
       }
     })
-    
+
     return Array.from(previousMeetings)
   }
 
@@ -277,7 +277,7 @@ export default function ResultPage() {
       const femaleCount = group.members.filter(p => p.gender === 'female').length
       const extrovertCount = group.members.filter(p => p.mbti === 'extrovert').length
       const introvertCount = group.members.filter(p => p.mbti === 'introvert').length
-      
+
       // 새로운 만남 수 재계산 (업데이트된 참가자 데이터 사용)
       let newMeetingsCount = 0
       for (let i = 0; i < group.members.length; i++) {
@@ -307,7 +307,7 @@ export default function ResultPage() {
     // 전체 요약 통계 재계산
     const totalNewMeetings = recalculatedGroups.reduce((sum, group) => sum + group.newMeetingsCount, 0)
     const totalParticipants = updatedParticipants.length
-    
+
     // 성별 균형 점수 계산
     let totalGenderBalance = 0
     recalculatedGroups.forEach(group => {
@@ -376,13 +376,13 @@ export default function ResultPage() {
         if (!newMeetingsByRound[currentRound].includes(participant.id)) {
           newMeetingsByRound[currentRound].push(participant.id)
         }
-        
+
         // allMetPeople 업데이트
         const newAllMetPeople = [...p.allMetPeople]
         if (!newAllMetPeople.includes(participant.id)) {
           newAllMetPeople.push(participant.id)
         }
-        
+
         return {
           ...p,
           meetingsByRound: newMeetingsByRound,
@@ -404,7 +404,7 @@ export default function ResultPage() {
         const femaleCount = updatedMembers.filter(p => p.gender === 'female').length
         const extrovertCount = updatedMembers.filter(p => p.mbti === 'extrovert').length
         const introvertCount = updatedMembers.filter(p => p.mbti === 'introvert').length
-        
+
         return {
           ...group,
           members: updatedMembers,
@@ -490,8 +490,8 @@ export default function ResultPage() {
     if (!participantToEdit) return
 
     // 참가자 정보 업데이트
-    const updatedParticipants = participants.map(p => 
-      p.id === editingParticipant 
+    const updatedParticipants = participants.map(p =>
+      p.id === editingParticipant
         ? { ...p, name: editForm.name.trim(), gender: editForm.gender, mbti: editForm.mbti }
         : p
     )
@@ -499,7 +499,7 @@ export default function ResultPage() {
     // 그룹 결과에서도 해당 참가자 정보 업데이트
     const updatedGroups = result.groups.map(group => ({
       ...group,
-      members: group.members.map(member => 
+      members: group.members.map(member =>
         member.id === editingParticipant
           ? { ...member, name: editForm.name.trim(), gender: editForm.gender, mbti: editForm.mbti }
           : member
@@ -548,7 +548,7 @@ export default function ResultPage() {
     if (!participantToDelete) return
 
     const confirmMessage = `🗑️ "${participantToDelete.name}"을(를) 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`
-    
+
     if (!confirm(confirmMessage)) return
 
     // 이탈 참가자 목록에 추가
@@ -613,8 +613,8 @@ export default function ResultPage() {
     const updatedGroups = result.groups.map(group => {
       if (group.id === group1Id) {
         // group1에서 participant1을 participant2로 교체
-        const updatedMembers = group.members.map(member => 
-          member.id === participant1Id 
+        const updatedMembers = group.members.map(member =>
+          member.id === participant1Id
             ? result.groups.find(g => g.id === group2Id)?.members.find(m => m.id === participant2Id)!
             : member
         )
@@ -635,7 +635,7 @@ export default function ResultPage() {
     const currentRound = result.round || 1
     const updatedParticipants = participants.map(participant => {
       let updatedParticipant = { ...participant }
-      
+
       if (participant.id === participant1Id) {
         // participant1의 마지막 그룹 히스토리를 새로운 그룹(group2Id)으로 변경
         const newGroupHistory = [...participant.groupHistory]
@@ -643,20 +643,20 @@ export default function ResultPage() {
           newGroupHistory[newGroupHistory.length - 1] = group2Id
         }
         updatedParticipant.groupHistory = newGroupHistory
-        
+
         // 현재 라운드 만남 기록 업데이트: participant1이 이제 group2에 속함
         const newMeetingsByRound = { ...participant.meetingsByRound }
         if (!newMeetingsByRound[currentRound]) newMeetingsByRound[currentRound] = []
-        
+
         // 새로운 그룹 구성에서 participant1과 같은 그룹인 사람들 = group2의 기존 멤버들 (participant2 제외) + participant1
         const newGroupMembers = updatedGroups.find(g => g.id === group2Id)?.members || []
         const newMeetings = newGroupMembers
           .filter(member => member.id !== participant1Id) // 자신 제외
           .map(member => member.id)
-        
+
         newMeetingsByRound[currentRound] = newMeetings
         updatedParticipant.meetingsByRound = newMeetingsByRound
-        
+
       } else if (participant.id === participant2Id) {
         // participant2의 마지막 그룹 히스토리를 새로운 그룹(group1Id)으로 변경
         const newGroupHistory = [...participant.groupHistory]
@@ -664,44 +664,44 @@ export default function ResultPage() {
           newGroupHistory[newGroupHistory.length - 1] = group1Id
         }
         updatedParticipant.groupHistory = newGroupHistory
-        
+
         // 현재 라운드 만남 기록 업데이트: participant2가 이제 group1에 속함
         const newMeetingsByRound = { ...participant.meetingsByRound }
         if (!newMeetingsByRound[currentRound]) newMeetingsByRound[currentRound] = []
-        
+
         // 새로운 그룹 구성에서 participant2와 같은 그룹인 사람들 = group1의 기존 멤버들 (participant1 제외) + participant2
         const newGroupMembers = updatedGroups.find(g => g.id === group1Id)?.members || []
         const newMeetings = newGroupMembers
           .filter(member => member.id !== participant2Id) // 자신 제외
           .map(member => member.id)
-        
+
         newMeetingsByRound[currentRound] = newMeetings
         updatedParticipant.meetingsByRound = newMeetingsByRound
-        
+
       } else {
         // 다른 참가자들의 만남 기록을 새로운 그룹 구조에 맞춰 재계산
         const newMeetingsByRound = { ...participant.meetingsByRound }
         if (!newMeetingsByRound[currentRound]) newMeetingsByRound[currentRound] = []
-        
+
         // 이 참가자가 속한 새로운 그룹 찾기
-        const participantGroup = updatedGroups.find(group => 
+        const participantGroup = updatedGroups.find(group =>
           group.members.some(member => member.id === participant.id)
         )
-        
+
         if (participantGroup) {
           // 같은 그룹 멤버들과의 만남 기록 설정 (자신 제외)
           const newMeetings = participantGroup.members
             .filter(member => member.id !== participant.id)
             .map(member => member.id)
-          
+
           newMeetingsByRound[currentRound] = newMeetings
         }
-        
+
         updatedParticipant.meetingsByRound = newMeetingsByRound
       }
-      
+
       // allMetPeople는 통계 계산 시 실시간으로 처리하므로 여기서는 업데이트하지 않음
-      
+
       return updatedParticipant
     })
 
@@ -711,7 +711,7 @@ export default function ResultPage() {
     // 상태 업데이트
     setResult(fullyUpdatedResult)
     setParticipants(updatedParticipants)
-    
+
     // Supabase 업데이트
     try {
       const { saveGroupingResult, saveParticipants } = await import('@/utils/database')
@@ -728,13 +728,13 @@ export default function ResultPage() {
     const p1Name = result.groups.find(g => g.id === group1Id)?.members.find(m => m.id === participant1Id)?.name
     const p2Name = result.groups.find(g => g.id === group2Id)?.members.find(m => m.id === participant2Id)?.name
     setSwapMessage(`${p1Name} ↔ ${p2Name} 위치 변경 완료!`)
-    
+
     // Swap 시 스냅샷 생성
     createSnapshot('swap', `${p1Name} ↔ ${p2Name} 위치 변경`)
-    
+
     // 3초 후 메시지 자동 제거
     setTimeout(() => setSwapMessage(null), 3000)
-    
+
   }
 
   // 드래그 시작
@@ -755,7 +755,7 @@ export default function ResultPage() {
         setDraggedParticipant(null)
         return
       }
-      
+
       // 같은 그룹 내에서 swap 시도하는지 확인
       if (draggedParticipant.fromGroupId === targetGroupId) {
         setSwapMessage('❌ 같은 그룹 내에서는 자리 바꾸기가 불가능합니다.')
@@ -763,9 +763,9 @@ export default function ResultPage() {
         setDraggedParticipant(null)
         return
       }
-      
+
       swapParticipants(
-        draggedParticipant.id, 
+        draggedParticipant.id,
         draggedParticipant.fromGroupId,
         targetParticipantId,
         targetGroupId
@@ -789,7 +789,7 @@ export default function ResultPage() {
         setTimeout(() => setSwapMessage(null), 2000)
         return
       }
-      
+
       // 같은 그룹 내에서 swap 시도하는지 확인
       if (swapSelectedParticipant.groupId === groupId) {
         setSwapMessage('❌ 같은 그룹 내에서는 자리 바꾸기가 불가능합니다.')
@@ -797,7 +797,7 @@ export default function ResultPage() {
         setSwapSelectedParticipant(null)
         return
       }
-      
+
       // swap 실행
       await swapParticipants(
         swapSelectedParticipant.id,
@@ -843,7 +843,7 @@ export default function ResultPage() {
           </div>
         </div>
       )}
-      
+
       <div className="max-w-6xl mx-auto px-4">
         {/* 홈 네비게이션 */}
         <div className="flex justify-between items-center mb-6">
@@ -854,7 +854,7 @@ export default function ResultPage() {
             <span className="text-lg">🏠</span>
             <span className="font-medium">홈으로</span>
           </button>
-          
+
           <div className="text-sm text-gray-500">
             {result.round}라운드 결과
           </div>
@@ -952,8 +952,8 @@ export default function ResultPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <p className="mb-1">
-                      <strong>🔄 위치 변경:</strong> 
-                      {isMobile 
+                      <strong>🔄 위치 변경:</strong>
+                      {isMobile
                         ? ' 첫 번째 참가자를 터치하고, 바꿀 다른 참가자를 터치하면 두 사람의 위치가 바뀝니다.'
                         : ' 참가자를 드래그해서 다른 참가자에게 드롭하면 두 사람의 위치가 바뀝니다.'
                       }
@@ -1019,7 +1019,7 @@ export default function ResultPage() {
                     </div>
                     <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
                       {group.maleCount > 0 && (
-                        <div 
+                        <div
                           className="bg-blue-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
                           style={{ width: `${(group.maleCount / group.members.length) * 100}%` }}
                         >
@@ -1029,7 +1029,7 @@ export default function ResultPage() {
                         </div>
                       )}
                       {group.femaleCount > 0 && (
-                        <div 
+                        <div
                           className="bg-pink-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
                           style={{ width: `${(group.femaleCount / group.members.length) * 100}%` }}
                         >
@@ -1053,7 +1053,7 @@ export default function ResultPage() {
                     </div>
                     <div className="flex h-4 bg-gray-200 rounded-full overflow-hidden">
                       {group.extrovertCount > 0 && (
-                        <div 
+                        <div
                           className="bg-orange-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
                           style={{ width: `${(group.extrovertCount / group.members.length) * 100}%` }}
                         >
@@ -1063,7 +1063,7 @@ export default function ResultPage() {
                         </div>
                       )}
                       {group.introvertCount > 0 && (
-                        <div 
+                        <div
                           className="bg-purple-500 flex items-center justify-center text-white text-xs font-medium transition-all duration-500"
                           style={{ width: `${(group.introvertCount / group.members.length) * 100}%` }}
                         >
@@ -1087,7 +1087,7 @@ export default function ResultPage() {
                         Math.abs(group.maleCount - group.femaleCount) <= 1 ? 'text-green-600' : 
                         Math.abs(group.maleCount - group.femaleCount) <= 2 ? 'text-yellow-600' : 'text-red-600'
                       }`}>
-                        {Math.abs(group.maleCount - group.femaleCount) <= 1 ? '우수' : 
+                        {Math.abs(group.maleCount - group.femaleCount) <= 1 ? '우수' :
                          Math.abs(group.maleCount - group.femaleCount) <= 2 ? '보통' : '개선필요'}
                       </span>
                     </div>
@@ -1097,7 +1097,7 @@ export default function ResultPage() {
                         Math.abs(group.extrovertCount - group.introvertCount) <= 1 ? 'text-green-600' : 
                         Math.abs(group.extrovertCount - group.introvertCount) <= 2 ? 'text-yellow-600' : 'text-red-600'
                       }`}>
-                        {Math.abs(group.extrovertCount - group.introvertCount) <= 1 ? '우수' : 
+                        {Math.abs(group.extrovertCount - group.introvertCount) <= 1 ? '우수' :
                          Math.abs(group.extrovertCount - group.introvertCount) <= 2 ? '보통' : '개선필요'}
                       </span>
                     </div>
@@ -1113,10 +1113,10 @@ export default function ResultPage() {
                   const isDragging = draggedParticipant?.id === member.id
                   const isSelected = swapSelectedParticipant?.id === member.id
                   const isSwapTarget = swapSelectedParticipant && swapSelectedParticipant.id !== member.id && swapSelectedParticipant.groupId !== group.id
-                  
+
                   return (
-                    <div 
-                      key={member.id} 
+                    <div
+                      key={member.id}
                       className={`
                         border border-gray-200 rounded transition-all duration-200
                         ${editingParticipant === member.id ? 'border-purple-400 bg-purple-50' : ''}
@@ -1134,7 +1134,7 @@ export default function ResultPage() {
                             <h4 className="text-sm font-medium text-purple-700">참가자 정보 수정</h4>
                             <div className="text-xs text-purple-600">그룹 {group.id}</div>
                           </div>
-                          
+
                           <div className="space-y-2">
                             <input
                               type="text"
@@ -1143,7 +1143,7 @@ export default function ResultPage() {
                               onChange={(e) => setEditForm({...editForm, name: e.target.value})}
                               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                             />
-                            
+
                             <div className="grid grid-cols-2 gap-2">
                               <select
                                 value={editForm.gender}
@@ -1153,7 +1153,7 @@ export default function ResultPage() {
                                 <option value="male">남성</option>
                                 <option value="female">여성</option>
                               </select>
-                              
+
                               <select
                                 value={editForm.mbti}
                                 onChange={(e) => setEditForm({...editForm, mbti: e.target.value as 'extrovert' | 'introvert'})}
@@ -1164,7 +1164,7 @@ export default function ResultPage() {
                               </select>
                             </div>
                           </div>
-                          
+
                           <div className="flex gap-2">
                             <button
                               onClick={saveEditParticipant}
@@ -1183,8 +1183,8 @@ export default function ResultPage() {
                         </div>
                       ) : (
                         // 일반 모드
-                        <div className="flex items-center justify-between p-2">
-                          <div 
+                        <div className={`flex items-center justify-between p-2 rounded-lg ${member.gender === 'male' ? 'bg-blue-50 border-l-4 border-blue-300' : 'bg-red-50 border-l-4 border-red-300'}`}>
+                          <div
                             draggable={!isMobile && !swapSelectedParticipant}
                             onDragStart={!isMobile && !swapSelectedParticipant ? () => handleDragStart(member.id, group.id) : undefined}
                             onDragOver={!isMobile ? handleDragOver : undefined}
@@ -1197,14 +1197,18 @@ export default function ResultPage() {
                               isSelected ? '선택됨 - 다시 터치하면 선택 취소' :
                               isSwapTarget ? `${member.name}과 위치 바꾸기` :
                               !swapSelectedParticipant && isMobile ? '터치해서 선택' :
-                              !swapSelectedParticipant && draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` : 
+                              !swapSelectedParticipant && draggedParticipant && draggedParticipant.id !== member.id ? `${member.name}과 위치 바꾸기` :
                               !swapSelectedParticipant ? '드래그해서 다른 사람과 위치 바꾸기' : ''
                             }
                           >
-                            <span className="font-medium">{member.name}</span>
-                            <div className="text-xs text-gray-500">
-                              {member.gender === 'male' ? '남성' : '여성'} · {' '}
-                              {member.mbti === 'extrovert' ? '외향' : '내향'}
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <span className={`font-medium ${member.gender === 'male' ? 'text-blue-800' : 'text-red-800'}`}>{member.name}</span>
+                                <div className="text-xs text-gray-500">
+                                  {member.gender === 'male' ? '남성' : '여성'} · {' '}
+                                  {member.mbti === 'extrovert' ? '외향' : '내향'}
+                                </div>
+                              </div>
                             </div>
                             <div className="text-xs text-blue-600">
                               현재 그룹: {group.id}
@@ -1215,7 +1219,7 @@ export default function ResultPage() {
                               </div>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center gap-1 ml-2">
                             {isSelected && (
                               <div className="text-orange-500 text-sm font-bold animate-pulse">
@@ -1227,7 +1231,7 @@ export default function ResultPage() {
                                 🔄
                               </div>
                             )}
-                            
+
                             {!isSelected && !isSwapTarget && (
                               <div className="flex gap-1">
                                 <button
@@ -1252,7 +1256,7 @@ export default function ResultPage() {
                     </div>
                   )
                 })}
-                
+
                 {/* 참가자 추가 폼 */}
                 {showAddForm === group.id ? (
                   <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-lg">
@@ -1265,7 +1269,7 @@ export default function ResultPage() {
                         onChange={(e) => setNewParticipant({...newParticipant, name: e.target.value})}
                         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      
+
                       <div className="grid grid-cols-2 gap-2">
                         <select
                           value={newParticipant.gender}
@@ -1275,7 +1279,7 @@ export default function ResultPage() {
                           <option value="male">남성</option>
                           <option value="female">여성</option>
                         </select>
-                        
+
                         <select
                           value={newParticipant.mbti}
                           onChange={(e) => setNewParticipant({...newParticipant, mbti: e.target.value as 'extrovert' | 'introvert'})}
@@ -1285,7 +1289,7 @@ export default function ResultPage() {
                           <option value="introvert">내향형</option>
                         </select>
                       </div>
-                      
+
                       <div className="flex gap-2">
                         <button
                           onClick={() => addParticipantToGroup(group.id)}
@@ -1330,8 +1334,8 @@ export default function ResultPage() {
         )}
 
         {activeTab === 'seating' && result && (
-          <SeatingChart 
-            groups={result.groups} 
+          <SeatingChart
+            groups={result.groups}
             participants={participants}
             onPrint={() => window.print()}
           />
@@ -1344,22 +1348,22 @@ export default function ResultPage() {
               const participantStats = participants.map(participant => {
                 // 이전 라운드들에서 만난 사람들 (새로운 구조 사용)
                 const previousMeetings = getPreviousRoundsMeetings(participant.id)
-                
+
                 // 현재 라운드에서 만날 사람들
                 const currentRoundMeetings = getCurrentRoundMeetings(participant.id)
-                
+
                 // 전체 만남 = meetingsByRound에서 직접 계산 (이탈한 사람 포함)
                 const allMetIds = new Set<string>()
                 Object.values(participant.meetingsByRound).forEach(roundMeetings => {
                   roundMeetings.forEach(personId => allMetIds.add(personId))
                 })
                 const totalMet = allMetIds.size
-                
-                
+
+
                 // 이성 만남 계산 - 이탈한 사람도 포함해서 계산
                 // 현재 상태에서 이탈 참가자 정보 가져오기
                 const currentExitedParticipants = exitedParticipants
-                
+
                 const oppositeMet = Array.from(allMetIds).filter(metId => {
                   const metPerson = participants.find(p => p.id === metId)
                   // 현재 참가자 중에 있으면 성별 비교
@@ -1375,18 +1379,18 @@ export default function ResultPage() {
                   }
                   return false
                 }).length
-                
-                
+
+
                 // 현재 라운드에서 새로 만날 사람 수 (이전에 만나지 않은 사람들만)
-                const newInCurrentRound = currentRoundMeetings.filter(meetingId => 
+                const newInCurrentRound = currentRoundMeetings.filter(meetingId =>
                   !previousMeetings.includes(meetingId)
                 ).length
-                
+
                 // 현재 그룹 ID
-                const currentGroup = result?.groups.find(group => 
+                const currentGroup = result?.groups.find(group =>
                   group.members.some(member => member.id === participant.id)
                 )
-                
+
                 return {
                   ...participant,
                   totalMet,
@@ -1426,7 +1430,7 @@ export default function ResultPage() {
                         <div key={count} className="flex items-center">
                           <div className="w-16 text-sm text-gray-600">{count}명:</div>
                           <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
-                            <div 
+                            <div
                               className="bg-blue-500 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                               style={{ width: `${((totalMetCounts[count] || 0) / maxCount) * 100}%` }}
                             >
@@ -1451,7 +1455,7 @@ export default function ResultPage() {
                         <div key={count} className="flex items-center">
                           <div className="w-16 text-sm text-gray-600">{count}명:</div>
                           <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
-                            <div 
+                            <div
                               className="bg-pink-500 h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2"
                               style={{ width: `${((oppositeMetCounts[count] || 0) / maxCount) * 100}%` }}
                             >
@@ -1468,13 +1472,13 @@ export default function ResultPage() {
                   {/* 개별 참가자 테이블 - 성별로 분리 */}
                   <div className="space-y-6">
                     <p className="text-sm text-gray-600">칼럼 헤더를 클릭하면 해당 기준으로 정렬됩니다. 상세보기 버튼으로 라운드별 만남 히스토리를 확인할 수 있습니다.</p>
-                    
+
                     {(() => {
                       // 전체 참가자를 성별로 분리
                       const sortedParticipants = sortParticipants(participantStats)
                       const maleParticipants = sortedParticipants.filter(p => p.gender === 'male')
                       const femaleParticipants = sortedParticipants.filter(p => p.gender === 'female')
-                      
+
                       // 정렬 아이콘 표시 헬퍼 함수
                       const getSortIcon = (column: typeof sortBy) => {
                         if (sortBy !== column) return '↕️'
@@ -1488,7 +1492,7 @@ export default function ResultPage() {
                             <span className={`${titleColor} mr-2`}>👥</span>
                             {title} ({participants.length}명)
                           </h3>
-                          
+
                           <div className="w-full">
                             {/* 테이블 */}
                             <div className="overflow-x-auto">
@@ -1496,7 +1500,7 @@ export default function ResultPage() {
                                 {/* 테이블 헤더 */}
                                 <thead className={`${bgColor}`}>
                                   <tr>
-                                    <th 
+                                    <th
                                       onClick={() => handleSort('name', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
@@ -1508,7 +1512,7 @@ export default function ResultPage() {
                                     <th className="border border-gray-200 px-4 py-3 text-left">
                                       <span className="font-semibold text-gray-700">MBTI</span>
                                     </th>
-                                    <th 
+                                    <th
                                       onClick={() => handleSort('totalMet', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
@@ -1517,7 +1521,7 @@ export default function ResultPage() {
                                         <span className="text-gray-400">{getSortIcon('totalMet')}</span>
                                       </div>
                                     </th>
-                                    <th 
+                                    <th
                                       onClick={() => handleSort('oppositeMet', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
@@ -1526,7 +1530,7 @@ export default function ResultPage() {
                                         <span className="text-gray-400">{getSortIcon('oppositeMet')}</span>
                                       </div>
                                     </th>
-                                    <th 
+                                    <th
                                       onClick={() => handleSort('newInCurrentRound', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
@@ -1535,7 +1539,7 @@ export default function ResultPage() {
                                         <span className="text-gray-400">{getSortIcon('newInCurrentRound')}</span>
                                       </div>
                                     </th>
-                                    <th 
+                                    <th
                                       onClick={() => handleSort('currentGroupId', tableId)}
                                       className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
                                     >
@@ -1549,12 +1553,12 @@ export default function ResultPage() {
                                     </th>
                                   </tr>
                                 </thead>
-                                
+
                                 {/* 테이블 바디 */}
                                 <tbody>
                                   {participants.map((participant, index) => (
                                     <React.Fragment key={participant.id}>
-                                      <tr 
+                                      <tr
                                         className={`${
                                           index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                                         } hover:bg-blue-50 transition-colors`}
@@ -1563,29 +1567,29 @@ export default function ResultPage() {
                                         <td className="border border-gray-200 px-4 py-3">
                                           <div className="font-medium text-gray-900">{participant.name}</div>
                                         </td>
-                                        
+
                                         {/* MBTI만 표시 (성별은 제목에 이미 표시) */}
                                         <td className="border border-gray-200 px-4 py-3">
                                           <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
                                             {participant.mbti === 'extrovert' ? '외향' : '내향'}
                                           </span>
                                         </td>
-                                        
+
                                         {/* 전체 만남 */}
                                         <td className="border border-gray-200 px-4 py-3 text-center">
                                           <span className="font-semibold text-blue-600">{participant.totalMet}</span>
                                         </td>
-                                        
+
                                         {/* 이성 만남 */}
                                         <td className="border border-gray-200 px-4 py-3 text-center">
                                           <span className="font-semibold text-pink-600">{participant.oppositeMet}</span>
                                         </td>
-                                        
+
                                         {/* 이번 라운드 */}
                                         <td className="border border-gray-200 px-4 py-3 text-center">
                                           <span className="font-semibold text-green-600">{participant.newInCurrentRound}</span>
                                         </td>
-                                        
+
                                         {/* 현재 그룹 */}
                                         <td className="border border-gray-200 px-4 py-3 text-center">
                                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1596,7 +1600,7 @@ export default function ResultPage() {
                                             {participant.currentGroupId || '없음'}
                                           </span>
                                         </td>
-                                        
+
                                         {/* 액션 */}
                                         <td className="border border-gray-200 px-4 py-3 text-center">
                                           <button
@@ -1613,7 +1617,7 @@ export default function ResultPage() {
                                           </button>
                                         </td>
                                       </tr>
-                                      
+
                                       {/* 상세 정보 행 (확장 가능) */}
                                       {selectedParticipant === participant.id && (
                                         <tr>
@@ -1623,7 +1627,7 @@ export default function ResultPage() {
                                                 <span className="text-purple-500 mr-2">📊</span>
                                                 상세 만남 히스토리
                                               </h6>
-                                              
+
                                               {(() => {
                                                 // 만난 횟수 계산
                                                 const meetingCount = {}
@@ -1632,18 +1636,18 @@ export default function ResultPage() {
                                                     meetingCount[personId] = (meetingCount[personId] || 0) + 1
                                                   })
                                                 })
-                                                
+
                                                 // 라운드별 만남 데이터 정리
                                                 const roundEntries = Object.entries(participant.meetingsByRound || {})
                                                   .map(([round, meetings]) => ({ round: parseInt(round), meetings }))
                                                   .sort((a, b) => a.round - b.round)
-                                                
+
                                                 if (roundEntries.length === 0) {
                                                   return (
                                                     <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
                                                   )
                                                 }
-                                                
+
                                                 return (
                                                   <div className="space-y-4">
                                                     {/* 전체 요약 */}
@@ -1655,16 +1659,16 @@ export default function ResultPage() {
                                                         </span>
                                                       </div>
                                                       <div className="text-xs text-purple-600">
-                                                        라운드: {roundEntries.length}개 | 
+                                                        라운드: {roundEntries.length}개 |
                                                         총 만남: {Object.values(meetingCount).reduce((sum, count) => sum + count, 0)}회
                                                       </div>
                                                     </div>
-                                                    
+
                                                     {/* 라운드별 만남 목록 */}
                                                     <div className="space-y-3 max-h-60 overflow-y-auto">
                                                       {roundEntries.map(({ round, meetings }) => (
-                                                        <div 
-                                                          key={round} 
+                                                        <div
+                                                          key={round}
                                                           className={`p-3 rounded-lg border-2 ${
                                                             round === result.round 
                                                               ? 'border-green-300 bg-green-50' 
@@ -1688,21 +1692,21 @@ export default function ResultPage() {
                                                               {meetings.length}명
                                                             </span>
                                                           </div>
-                                                          
+
                                                           {meetings.length > 0 ? (
                                                             <div className="flex flex-wrap gap-1.5">
                                                               {meetings.map(meetingId => {
                                                                 const meetingPerson = sortedParticipants.find(p => p.id === meetingId)
                                                                 const exitedPerson = exitedParticipants[meetingId]
-                                                                
+
                                                                 if (!meetingPerson && !exitedPerson) return null
-                                                                
+
                                                                 const personInfo = meetingPerson || exitedPerson
                                                                 const isExited = !meetingPerson
                                                                 const meetCount = meetingCount[meetingId] || 1
-                                                                
+
                                                                 return (
-                                                                  <span 
+                                                                  <span
                                                                     key={meetingId}
                                                                     className={`relative text-xs px-2 py-1 rounded-full transition-all hover:scale-105 ${
                                                                       isExited 
@@ -1736,7 +1740,7 @@ export default function ResultPage() {
                                                         </div>
                                                       ))}
                                                     </div>
-                                                    
+
                                                     {/* 만남 횟수별 요약 */}
                                                     {Object.keys(meetingCount).length > 0 && (
                                                       <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
@@ -1752,9 +1756,9 @@ export default function ResultPage() {
                                                               const person = sortedParticipants.find(p => p.id === personId) || exitedParticipants[personId]
                                                               if (!person) return null
                                                               const isExited = !sortedParticipants.find(p => p.id === personId)
-                                                              
+
                                                               return (
-                                                                <span 
+                                                                <span
                                                                   key={personId}
                                                                   className={`text-xs px-2 py-1 rounded-full font-medium ${
                                                                     count >= 3 
@@ -1794,7 +1798,7 @@ export default function ResultPage() {
                         <div className="space-y-6">
                           {/* 남성 테이블 */}
                           {renderTable(maleParticipants, '남성 참가자', 'text-blue-700', 'bg-blue-50', 'male-table', 'bg-blue-50')}
-                          
+
                           {/* 여성 테이블 */}
                           {renderTable(femaleParticipants, '여성 참가자', 'text-red-700', 'bg-red-50', 'female-table', 'bg-red-50')}
                         </div>
