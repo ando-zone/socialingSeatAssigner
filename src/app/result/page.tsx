@@ -35,7 +35,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { GroupingResult, Participant } from '@/utils/grouping'
 import { migrateParticipantData } from '@/utils/grouping'
@@ -82,6 +82,10 @@ export default function ResultPage() {
   const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null)   // 통계 탭에서 선택된 참가자
   const [isMobile, setIsMobile] = useState(false)                          // 모바일 환경 감지
   
+  // 참가자 테이블 정렬 상태
+  const [sortBy, setSortBy] = useState<'name' | 'totalMet' | 'oppositeMet' | 'newInCurrentRound' | 'currentGroupId'>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  
   // 참가자 편집 상태
   const [editingParticipant, setEditingParticipant] = useState<string | null>(null)     // 편집 중인 참가자 ID
   const [editForm, setEditForm] = useState({
@@ -94,6 +98,56 @@ export default function ResultPage() {
   const changeActiveTab = (tab: 'groups' | 'stats' | 'seating') => {
     setActiveTab(tab)
     localStorage.setItem('result-active-tab', tab)
+  }
+
+  // 테이블 정렬 핸들러
+  const handleSort = (column: typeof sortBy) => {
+    if (sortBy === column) {
+      // 같은 칼럼을 다시 클릭하면 순서 변경
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      // 다른 칼럼을 클릭하면 해당 칼럼으로 오름차순 정렬
+      setSortBy(column)
+      setSortOrder('asc')
+    }
+  }
+
+  // 참가자 정렬 함수
+  const sortParticipants = (participants: any[]) => {
+    return [...participants].sort((a, b) => {
+      let aValue, bValue
+      
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name
+          bValue = b.name
+          // 문자열 정렬
+          return sortOrder === 'asc' 
+            ? aValue.localeCompare(bValue, 'ko')
+            : bValue.localeCompare(aValue, 'ko')
+        case 'totalMet':
+          aValue = a.totalMet
+          bValue = b.totalMet
+          break
+        case 'oppositeMet':
+          aValue = a.oppositeMet
+          bValue = b.oppositeMet
+          break
+        case 'newInCurrentRound':
+          aValue = a.newInCurrentRound
+          bValue = b.newInCurrentRound
+          break
+        case 'currentGroupId':
+          aValue = a.currentGroupId || 0
+          bValue = b.currentGroupId || 0
+          break
+        default:
+          return 0
+      }
+      
+      // 숫자 정렬
+      return sortOrder === 'asc' ? aValue - bValue : bValue - aValue
+    })
   }
 
   useEffect(() => {
@@ -1394,451 +1448,331 @@ export default function ResultPage() {
                     </div>
                   </div>
 
-                  {/* 개별 참가자 상세 */}
+                  {/* 개별 참가자 테이블 */}
                   <div className="bg-white rounded-lg shadow-md p-6">
                     <h3 className="text-lg font-semibold mb-4 flex items-center">
-                      <span className="text-green-500 mr-2">👤</span>
-                      개별 참가자 상세 정보
+                      <span className="text-green-500 mr-2">📊</span>
+                      참가자 통계 테이블
                     </h3>
-                    <p className="text-sm text-gray-600 mb-6">참가자를 클릭하면 만난 사람들 목록을 확인할 수 있습니다.</p>
+                    <p className="text-sm text-gray-600 mb-6">칼럼 헤더를 클릭하면 해당 기준으로 정렬됩니다. 상세보기 버튼으로 라운드별 만남 히스토리를 확인할 수 있습니다.</p>
                     
                     {(() => {
-                      // 남녀로 분리하고 각각 가나다 순으로 정렬
-                      const maleParticipants = participantStats
-                        .filter(p => p.gender === 'male')
-                        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+                      // 정렬된 모든 참가자 목록
+                      const sortedParticipants = sortParticipants(participantStats)
                       
-                      const femaleParticipants = participantStats
-                        .filter(p => p.gender === 'female')
-                        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+                      // 정렬 아이콘 표시 헬퍼 함수
+                      const getSortIcon = (column: typeof sortBy) => {
+                        if (sortBy !== column) return '↕️'
+                        return sortOrder === 'asc' ? '↑' : '↓'
+                      }
 
                       return (
-                        <div className="space-y-8">
-                          {/* 남성 참가자 섹션 */}
-                          {maleParticipants.length > 0 && (
-                            <div>
-                              <div className="flex items-center mb-4 pb-2 border-b border-blue-200">
-                                <span className="text-blue-600 text-xl mr-3">👨</span>
-                                <h4 className="text-lg font-semibold text-blue-800">
-                                  남성 참가자 ({maleParticipants.length}명)
-                                </h4>
-                              </div>
+                        <div className="w-full">
+                          {/* 테이블 */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-200 rounded-lg">
+                              {/* 테이블 헤더 */}
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th 
+                                    onClick={() => handleSort('name')}
+                                    className="border border-gray-200 px-4 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-semibold text-gray-700">이름</span>
+                                      <span className="text-gray-400">{getSortIcon('name')}</span>
+                                    </div>
+                                  </th>
+                                  <th className="border border-gray-200 px-4 py-3 text-left">
+                                    <span className="font-semibold text-gray-700">성별/MBTI</span>
+                                  </th>
+                                  <th 
+                                    onClick={() => handleSort('totalMet')}
+                                    className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span className="font-semibold text-gray-700">전체 만남</span>
+                                      <span className="text-gray-400">{getSortIcon('totalMet')}</span>
+                                    </div>
+                                  </th>
+                                  <th 
+                                    onClick={() => handleSort('oppositeMet')}
+                                    className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span className="font-semibold text-gray-700">이성 만남</span>
+                                      <span className="text-gray-400">{getSortIcon('oppositeMet')}</span>
+                                    </div>
+                                  </th>
+                                  <th 
+                                    onClick={() => handleSort('newInCurrentRound')}
+                                    className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span className="font-semibold text-gray-700">이번 라운드</span>
+                                      <span className="text-gray-400">{getSortIcon('newInCurrentRound')}</span>
+                                    </div>
+                                  </th>
+                                  <th 
+                                    onClick={() => handleSort('currentGroupId')}
+                                    className="border border-gray-200 px-4 py-3 text-center cursor-pointer hover:bg-gray-100 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span className="font-semibold text-gray-700">현재 그룹</span>
+                                      <span className="text-gray-400">{getSortIcon('currentGroupId')}</span>
+                                    </div>
+                                  </th>
+                                  <th className="border border-gray-200 px-4 py-3 text-center">
+                                    <span className="font-semibold text-gray-700">액션</span>
+                                  </th>
+                                </tr>
+                              </thead>
                               
-                                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                 {maleParticipants.map(participant => (
-                                   <div 
-                                     key={participant.id}
-                                     onClick={() => setSelectedParticipant(
-                                       selectedParticipant === participant.id ? null : participant.id
-                                     )}
-                                     className="border border-blue-200 rounded-lg p-4 hover:bg-blue-50 cursor-pointer transition-colors"
-                                   >
-                                     <div className="flex justify-between items-start mb-2">
-                                       <h5 className="font-medium text-gray-800">{participant.name}</h5>
-                                       <div className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                                         남성 · {participant.mbti === 'extrovert' ? '외향' : '내향'}
-                                       </div>
-                                     </div>
-                                     
-                                     <div className="grid grid-cols-3 gap-2 text-sm">
-                                       <div className="text-center p-2 bg-blue-50 rounded">
-                                         <div className="font-semibold text-blue-600">{participant.totalMet}</div>
-                                         <div className="text-gray-600">전체 만남</div>
-                                       </div>
-                                       <div className="text-center p-2 bg-pink-50 rounded">
-                                         <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
-                                         <div className="text-gray-600">이성 만남</div>
-                                       </div>
-                                       <div className="text-center p-2 bg-green-50 rounded">
-                                         <div className="font-semibold text-green-600">{participant.newInCurrentRound}</div>
-                                         <div className="text-gray-600">이번 라운드</div>
-                                       </div>
-                                     </div>
-                                     
-                                     <div className="mt-2 text-xs text-gray-500 text-center">
-                                       현재 그룹: {participant.currentGroupId || '없음'}
-                                     </div>
-
-                                     {selectedParticipant === participant.id && (
-                                       <div className="mt-4 pt-4 border-t border-gray-200">
-                                         <h6 className="font-medium text-gray-700 mb-3 flex items-center">
-                                           <span className="text-purple-500 mr-2">📊</span>
-                                           상세 만남 히스토리
-                                         </h6>
-                                         
-                                         {(() => {
-                                           // 만난 횟수 계산
-                                           const meetingCount = {}
-                                           Object.values(participant.meetingsByRound || {}).forEach(roundMeetings => {
-                                             roundMeetings.forEach(personId => {
-                                               meetingCount[personId] = (meetingCount[personId] || 0) + 1
-                                             })
-                                           })
-                                           
-                                           // 라운드별 만남 데이터 정리
-                                           const roundEntries = Object.entries(participant.meetingsByRound || {})
-                                             .map(([round, meetings]) => ({ round: parseInt(round), meetings }))
-                                             .sort((a, b) => a.round - b.round)
-                                           
-                                           if (roundEntries.length === 0) {
-                                             return (
-                                               <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
-                                             )
-                                           }
-                                           
-                                           return (
-                                             <div className="space-y-4">
-                                               {/* 전체 요약 */}
-                                               <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-3 rounded-lg border border-purple-200">
-                                                 <div className="flex items-center justify-between mb-2">
-                                                   <span className="text-sm font-semibold text-purple-700">전체 요약</span>
-                                                   <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
-                                                     총 {Object.keys(meetingCount).length}명과 만남
-                                                   </span>
-                                                 </div>
-                                                 <div className="text-xs text-purple-600">
-                                                   라운드: {roundEntries.length}개 | 
-                                                   총 만남: {Object.values(meetingCount).reduce((sum, count) => sum + count, 0)}회
-                                                 </div>
-                                               </div>
-                                               
-                                               {/* 라운드별 만남 목록 */}
-                                               <div className="space-y-3 max-h-80 overflow-y-auto">
-                                                 {roundEntries.map(({ round, meetings }) => (
-                                                   <div 
-                                                     key={round} 
-                                                     className={`p-3 rounded-lg border-2 ${
-                                                       round === result.round 
-                                                         ? 'border-green-300 bg-green-50' 
-                                                         : 'border-gray-200 bg-gray-50'
-                                                     }`}
-                                                   >
-                                                     <div className="flex items-center justify-between mb-2">
-                                                       <div className="flex items-center">
-                                                         <span className={`text-sm font-bold px-2 py-1 rounded-full mr-2 ${
-                                                           round === result.round
-                                                             ? 'bg-green-500 text-white'
-                                                             : 'bg-gray-500 text-white'
-                                                         }`}>
-                                                           {round}R
-                                                         </span>
-                                                         <span className="text-sm font-medium text-gray-700">
-                                                           {round === result.round ? '현재 라운드' : `${round}라운드`}
-                                                         </span>
-                                                       </div>
-                                                       <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
-                                                         {meetings.length}명
-                                                       </span>
-                                                     </div>
-                                                     
-                                                     {meetings.length > 0 ? (
-                                                       <div className="flex flex-wrap gap-1.5">
-                                                         {meetings.map(meetingId => {
-                                                           const meetingPerson = participants.find(p => p.id === meetingId)
-                                                           const exitedPerson = exitedParticipants[meetingId]
-                                                           
-                                                           if (!meetingPerson && !exitedPerson) return null
-                                                           
-                                                           const personInfo = meetingPerson || exitedPerson
-                                                           const isExited = !meetingPerson
-                                                           const meetCount = meetingCount[meetingId] || 1
-                                                           
-                                                           return (
-                                                             <span 
-                                                               key={meetingId}
-                                                               className={`relative text-xs px-2 py-1 rounded-full transition-all hover:scale-105 ${
-                                                                 isExited 
-                                                                   ? 'bg-gray-100 text-gray-500 opacity-75'
-                                                                   : round === result.round
-                                                                     ? personInfo.gender === 'male'
-                                                                       ? 'bg-blue-100 text-blue-800 border-2 border-blue-300 border-dashed' 
-                                                                       : 'bg-red-100 text-red-800 border-2 border-red-300 border-dashed'
-                                                                     : personInfo.gender === 'male'
-                                                                       ? 'bg-blue-100 text-blue-700' 
-                                                                       : 'bg-red-100 text-red-700'
-                                                               }`}
-                                                               title={`${personInfo.name}과 총 ${meetCount}번 만남`}
-                                                             >
-                                                               {personInfo.name} {isExited ? '❌' : personInfo.gender === 'male' ? '👨' : '👩'}
-                                                               {meetCount > 1 && (
-                                                                 <sup className="ml-0.5 text-xs font-bold bg-orange-500 text-white px-1 rounded-full">
-                                                                   {meetCount}
-                                                                 </sup>
-                                                               )}
-                                                               {round === result.round && (
-                                                                 <span className="ml-1">✨</span>
-                                                               )}
-                                                             </span>
-                                                           )
-                                                         })}
-                                                       </div>
-                                                     ) : (
-                                                       <p className="text-xs text-gray-400">이 라운드에서는 아무도 만나지 않았습니다.</p>
-                                                     )}
-                                                   </div>
-                                                 ))}
-                                               </div>
-                                               
-                                               {/* 만남 횟수별 요약 */}
-                                               {Object.keys(meetingCount).length > 0 && (
-                                                 <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                                                   <div className="text-sm font-semibold text-orange-700 mb-2 flex items-center">
-                                                     <span className="text-orange-500 mr-1">🔥</span>
-                                                     자주 만난 사람들
-                                                   </div>
-                                                   <div className="flex flex-wrap gap-1.5">
-                                                     {Object.entries(meetingCount)
-                                                       .sort(([,a], [,b]) => b - a)
-                                                       .slice(0, 10)
-                                                       .map(([personId, count]) => {
-                                                         const person = participants.find(p => p.id === personId) || exitedParticipants[personId]
-                                                         if (!person) return null
-                                                         const isExited = !participants.find(p => p.id === personId)
-                                                         
-                                                         return (
-                                                           <span 
-                                                             key={personId}
-                                                             className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                               count >= 3 
-                                                                 ? 'bg-red-200 text-red-800'
-                                                                 : count >= 2
-                                                                   ? 'bg-yellow-200 text-yellow-800'
-                                                                   : 'bg-gray-200 text-gray-700'
-                                                             } ${isExited ? 'opacity-60' : ''}`}
-                                                           >
-                                                             {person.name} {isExited ? '❌' : person.gender === 'male' ? '👨' : '👩'} × {count}
-                                                           </span>
-                                                         )
-                                                       })}
-                                                   </div>
-                                                   <div className="text-xs text-orange-600 mt-2">
-                                                     💡 숫자는 총 만난 횟수를 나타냅니다
-                                                   </div>
-                                                 </div>
-                                               )}
-                                             </div>
-                                           )
-                                         })()}
-                                       </div>
-                                     )}
-                                   </div>
-                                 ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 여성 참가자 섹션 */}
-                          {femaleParticipants.length > 0 && (
-                            <div>
-                              <div className="flex items-center mb-4 pb-2 border-b border-pink-200">
-                                <span className="text-pink-600 text-xl mr-3">👩</span>
-                                <h4 className="text-lg font-semibold text-pink-800">
-                                  여성 참가자 ({femaleParticipants.length}명)
-                                </h4>
-                              </div>
-                              
-                                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                 {femaleParticipants.map(participant => (
-                                   <div 
-                                     key={participant.id}
-                                     onClick={() => setSelectedParticipant(
-                                       selectedParticipant === participant.id ? null : participant.id
-                                     )}
-                                     className="border border-pink-200 rounded-lg p-4 hover:bg-pink-50 cursor-pointer transition-colors"
-                                   >
-                                     <div className="flex justify-between items-start mb-2">
-                                       <h5 className="font-medium text-gray-800">{participant.name}</h5>
-                                       <div className="text-xs text-pink-600 bg-pink-100 px-2 py-1 rounded-full">
-                                         여성 · {participant.mbti === 'extrovert' ? '외향' : '내향'}
-                                       </div>
-                                     </div>
-                                     
-                                     <div className="grid grid-cols-3 gap-2 text-sm">
-                                       <div className="text-center p-2 bg-blue-50 rounded">
-                                         <div className="font-semibold text-blue-600">{participant.totalMet}</div>
-                                         <div className="text-gray-600">전체 만남</div>
-                                       </div>
-                                       <div className="text-center p-2 bg-pink-50 rounded">
-                                         <div className="font-semibold text-pink-600">{participant.oppositeMet}</div>
-                                         <div className="text-gray-600">이성 만남</div>
-                                       </div>
-                                       <div className="text-center p-2 bg-green-50 rounded">
-                                         <div className="font-semibold text-green-600">{participant.newInCurrentRound}</div>
-                                         <div className="text-gray-600">이번 라운드</div>
-                                       </div>
-                                     </div>
-                                     
-                                     <div className="mt-2 text-xs text-gray-500 text-center">
-                                       현재 그룹: {participant.currentGroupId || '없음'}
-                                     </div>
-
-                                     {selectedParticipant === participant.id && (
-                                       <div className="mt-4 pt-4 border-t border-gray-200">
-                                         <h6 className="font-medium text-gray-700 mb-3 flex items-center">
-                                           <span className="text-purple-500 mr-2">📊</span>
-                                           상세 만남 히스토리
-                                         </h6>
-                                         
-                                         {(() => {
-                                           // 만난 횟수 계산
-                                           const meetingCount = {}
-                                           Object.values(participant.meetingsByRound || {}).forEach(roundMeetings => {
-                                             roundMeetings.forEach(personId => {
-                                               meetingCount[personId] = (meetingCount[personId] || 0) + 1
-                                             })
-                                           })
-                                           
-                                           // 라운드별 만남 데이터 정리
-                                           const roundEntries = Object.entries(participant.meetingsByRound || {})
-                                             .map(([round, meetings]) => ({ round: parseInt(round), meetings }))
-                                             .sort((a, b) => a.round - b.round)
-                                           
-                                           if (roundEntries.length === 0) {
-                                             return (
-                                               <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
-                                             )
-                                           }
-                                           
-                                           return (
-                                             <div className="space-y-4">
-                                               {/* 전체 요약 */}
-                                               <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-3 rounded-lg border border-purple-200">
-                                                 <div className="flex items-center justify-between mb-2">
-                                                   <span className="text-sm font-semibold text-purple-700">전체 요약</span>
-                                                   <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
-                                                     총 {Object.keys(meetingCount).length}명과 만남
-                                                   </span>
-                                                 </div>
-                                                 <div className="text-xs text-purple-600">
-                                                   라운드: {roundEntries.length}개 | 
-                                                   총 만남: {Object.values(meetingCount).reduce((sum, count) => sum + count, 0)}회
-                                                 </div>
-                                               </div>
-                                               
-                                               {/* 라운드별 만남 목록 */}
-                                               <div className="space-y-3 max-h-80 overflow-y-auto">
-                                                 {roundEntries.map(({ round, meetings }) => (
-                                                   <div 
-                                                     key={round} 
-                                                     className={`p-3 rounded-lg border-2 ${
-                                                       round === result.round 
-                                                         ? 'border-green-300 bg-green-50' 
-                                                         : 'border-gray-200 bg-gray-50'
-                                                     }`}
-                                                   >
-                                                     <div className="flex items-center justify-between mb-2">
-                                                       <div className="flex items-center">
-                                                         <span className={`text-sm font-bold px-2 py-1 rounded-full mr-2 ${
-                                                           round === result.round
-                                                             ? 'bg-green-500 text-white'
-                                                             : 'bg-gray-500 text-white'
-                                                         }`}>
-                                                           {round}R
-                                                         </span>
-                                                         <span className="text-sm font-medium text-gray-700">
-                                                           {round === result.round ? '현재 라운드' : `${round}라운드`}
-                                                         </span>
-                                                       </div>
-                                                       <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
-                                                         {meetings.length}명
-                                                       </span>
-                                                     </div>
-                                                     
-                                                     {meetings.length > 0 ? (
-                                                       <div className="flex flex-wrap gap-1.5">
-                                                         {meetings.map(meetingId => {
-                                                           const meetingPerson = participants.find(p => p.id === meetingId)
-                                                           const exitedPerson = exitedParticipants[meetingId]
-                                                           
-                                                           if (!meetingPerson && !exitedPerson) return null
-                                                           
-                                                           const personInfo = meetingPerson || exitedPerson
-                                                           const isExited = !meetingPerson
-                                                           const meetCount = meetingCount[meetingId] || 1
-                                                           
-                                                           return (
-                                                             <span 
-                                                               key={meetingId}
-                                                               className={`relative text-xs px-2 py-1 rounded-full transition-all hover:scale-105 ${
-                                                                 isExited 
-                                                                   ? 'bg-gray-100 text-gray-500 opacity-75'
-                                                                   : round === result.round
-                                                                     ? personInfo.gender === 'male'
-                                                                       ? 'bg-blue-100 text-blue-800 border-2 border-blue-300 border-dashed' 
-                                                                       : 'bg-red-100 text-red-800 border-2 border-red-300 border-dashed'
-                                                                     : personInfo.gender === 'male'
-                                                                       ? 'bg-blue-100 text-blue-700' 
-                                                                       : 'bg-red-100 text-red-700'
-                                                               }`}
-                                                               title={`${personInfo.name}과 총 ${meetCount}번 만남`}
-                                                             >
-                                                               {personInfo.name} {isExited ? '❌' : personInfo.gender === 'male' ? '👨' : '👩'}
-                                                               {meetCount > 1 && (
-                                                                 <sup className="ml-0.5 text-xs font-bold bg-orange-500 text-white px-1 rounded-full">
-                                                                   {meetCount}
-                                                                 </sup>
-                                                               )}
-                                                               {round === result.round && (
-                                                                 <span className="ml-1">✨</span>
-                                                               )}
-                                                             </span>
-                                                           )
-                                                         })}
-                                                       </div>
-                                                     ) : (
-                                                       <p className="text-xs text-gray-400">이 라운드에서는 아무도 만나지 않았습니다.</p>
-                                                     )}
-                                                   </div>
-                                                 ))}
-                                               </div>
-                                               
-                                               {/* 만남 횟수별 요약 */}
-                                               {Object.keys(meetingCount).length > 0 && (
-                                                 <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-                                                   <div className="text-sm font-semibold text-orange-700 mb-2 flex items-center">
-                                                     <span className="text-orange-500 mr-1">🔥</span>
-                                                     자주 만난 사람들
-                                                   </div>
-                                                   <div className="flex flex-wrap gap-1.5">
-                                                     {Object.entries(meetingCount)
-                                                       .sort(([,a], [,b]) => b - a)
-                                                       .slice(0, 10)
-                                                       .map(([personId, count]) => {
-                                                         const person = participants.find(p => p.id === personId) || exitedParticipants[personId]
-                                                         if (!person) return null
-                                                         const isExited = !participants.find(p => p.id === personId)
-                                                         
-                                                         return (
-                                                           <span 
-                                                             key={personId}
-                                                             className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                               count >= 3 
-                                                                 ? 'bg-red-200 text-red-800'
-                                                                 : count >= 2
-                                                                   ? 'bg-yellow-200 text-yellow-800'
-                                                                   : 'bg-gray-200 text-gray-700'
-                                                             } ${isExited ? 'opacity-60' : ''}`}
-                                                           >
-                                                             {person.name} {isExited ? '❌' : person.gender === 'male' ? '👨' : '👩'} × {count}
-                                                           </span>
-                                                         )
-                                                       })}
-                                                   </div>
-                                                   <div className="text-xs text-orange-600 mt-2">
-                                                     💡 숫자는 총 만난 횟수를 나타냅니다
-                                                   </div>
-                                                 </div>
-                                               )}
-                                             </div>
-                                           )
-                                         })()}
-                                       </div>
-                                     )}
-                                   </div>
-                                 ))}
-                              </div>
-                            </div>
-                          )}
+                              {/* 테이블 바디 */}
+                              <tbody>
+                                {sortedParticipants.map((participant, index) => (
+                                  <React.Fragment key={participant.id}>
+                                    <tr 
+                                      className={`${
+                                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                                      } hover:bg-blue-50 transition-colors`}
+                                    >
+                                      {/* 이름 */}
+                                      <td className="border border-gray-200 px-4 py-3">
+                                        <div className="font-medium text-gray-900">{participant.name}</div>
+                                      </td>
+                                      
+                                      {/* 성별/MBTI */}
+                                      <td className="border border-gray-200 px-4 py-3">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`text-xs px-2 py-1 rounded-full ${
+                                            participant.gender === 'male' 
+                                              ? 'bg-blue-100 text-blue-700' 
+                                              : 'bg-red-100 text-red-700'
+                                          }`}>
+                                            {participant.gender === 'male' ? '👨 남성' : '👩 여성'}
+                                          </span>
+                                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                                            {participant.mbti === 'extrovert' ? '외향' : '내향'}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      
+                                      {/* 전체 만남 */}
+                                      <td className="border border-gray-200 px-4 py-3 text-center">
+                                        <span className="font-semibold text-blue-600">{participant.totalMet}</span>
+                                      </td>
+                                      
+                                      {/* 이성 만남 */}
+                                      <td className="border border-gray-200 px-4 py-3 text-center">
+                                        <span className="font-semibold text-pink-600">{participant.oppositeMet}</span>
+                                      </td>
+                                      
+                                      {/* 이번 라운드 */}
+                                      <td className="border border-gray-200 px-4 py-3 text-center">
+                                        <span className="font-semibold text-green-600">{participant.newInCurrentRound}</span>
+                                      </td>
+                                      
+                                      {/* 현재 그룹 */}
+                                      <td className="border border-gray-200 px-4 py-3 text-center">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                          participant.currentGroupId 
+                                            ? 'bg-purple-100 text-purple-700' 
+                                            : 'bg-gray-100 text-gray-500'
+                                        }`}>
+                                          {participant.currentGroupId || '없음'}
+                                        </span>
+                                      </td>
+                                      
+                                      {/* 액션 */}
+                                      <td className="border border-gray-200 px-4 py-3 text-center">
+                                        <button
+                                          onClick={() => setSelectedParticipant(
+                                            selectedParticipant === participant.id ? null : participant.id
+                                          )}
+                                          className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
+                                            selectedParticipant === participant.id
+                                              ? 'bg-green-500 text-white'
+                                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                          }`}
+                                        >
+                                          {selectedParticipant === participant.id ? '닫기' : '상세보기'}
+                                        </button>
+                                      </td>
+                                    </tr>
+                                    
+                                    {/* 상세 정보 행 (확장 가능) */}
+                                    {selectedParticipant === participant.id && (
+                                      <tr>
+                                        <td colSpan={7} className="border border-gray-200 bg-gray-50 p-0">
+                                          <div className="p-6">
+                                            <h6 className="font-medium text-gray-700 mb-3 flex items-center">
+                                              <span className="text-purple-500 mr-2">📊</span>
+                                              상세 만남 히스토리
+                                            </h6>
+                                            
+                                            {(() => {
+                                              // 만난 횟수 계산
+                                              const meetingCount = {}
+                                              Object.values(participant.meetingsByRound || {}).forEach(roundMeetings => {
+                                                roundMeetings.forEach(personId => {
+                                                  meetingCount[personId] = (meetingCount[personId] || 0) + 1
+                                                })
+                                              })
+                                              
+                                              // 라운드별 만남 데이터 정리
+                                              const roundEntries = Object.entries(participant.meetingsByRound || {})
+                                                .map(([round, meetings]) => ({ round: parseInt(round), meetings }))
+                                                .sort((a, b) => a.round - b.round)
+                                              
+                                              if (roundEntries.length === 0) {
+                                                return (
+                                                  <p className="text-gray-500 text-sm">아직 만난 사람이 없습니다.</p>
+                                                )
+                                              }
+                                              
+                                              return (
+                                                <div className="space-y-4">
+                                                  {/* 전체 요약 */}
+                                                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-3 rounded-lg border border-purple-200">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                      <span className="text-sm font-semibold text-purple-700">전체 요약</span>
+                                                      <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+                                                        총 {Object.keys(meetingCount).length}명과 만남
+                                                      </span>
+                                                    </div>
+                                                    <div className="text-xs text-purple-600">
+                                                      라운드: {roundEntries.length}개 | 
+                                                      총 만남: {Object.values(meetingCount).reduce((sum, count) => sum + count, 0)}회
+                                                    </div>
+                                                  </div>
+                                                  
+                                                  {/* 라운드별 만남 목록 */}
+                                                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                                                    {roundEntries.map(({ round, meetings }) => (
+                                                      <div 
+                                                        key={round} 
+                                                        className={`p-3 rounded-lg border-2 ${
+                                                          round === result.round 
+                                                            ? 'border-green-300 bg-green-50' 
+                                                            : 'border-gray-200 bg-gray-50'
+                                                        }`}
+                                                      >
+                                                        <div className="flex items-center justify-between mb-2">
+                                                          <div className="flex items-center">
+                                                            <span className={`text-sm font-bold px-2 py-1 rounded-full mr-2 ${
+                                                              round === result.round
+                                                                ? 'bg-green-500 text-white'
+                                                                : 'bg-gray-500 text-white'
+                                                            }`}>
+                                                              {round}R
+                                                            </span>
+                                                            <span className="text-sm font-medium text-gray-700">
+                                                              {round === result.round ? '현재 라운드' : `${round}라운드`}
+                                                            </span>
+                                                          </div>
+                                                          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
+                                                            {meetings.length}명
+                                                          </span>
+                                                        </div>
+                                                        
+                                                        {meetings.length > 0 ? (
+                                                          <div className="flex flex-wrap gap-1.5">
+                                                            {meetings.map(meetingId => {
+                                                              const meetingPerson = participants.find(p => p.id === meetingId)
+                                                              const exitedPerson = exitedParticipants[meetingId]
+                                                              
+                                                              if (!meetingPerson && !exitedPerson) return null
+                                                              
+                                                              const personInfo = meetingPerson || exitedPerson
+                                                              const isExited = !meetingPerson
+                                                              const meetCount = meetingCount[meetingId] || 1
+                                                              
+                                                              return (
+                                                                <span 
+                                                                  key={meetingId}
+                                                                  className={`relative text-xs px-2 py-1 rounded-full transition-all hover:scale-105 ${
+                                                                    isExited 
+                                                                      ? 'bg-gray-100 text-gray-500 opacity-75'
+                                                                      : round === result.round
+                                                                        ? personInfo.gender === 'male'
+                                                                          ? 'bg-blue-100 text-blue-800 border-2 border-blue-300 border-dashed' 
+                                                                          : 'bg-red-100 text-red-800 border-2 border-red-300 border-dashed'
+                                                                        : personInfo.gender === 'male'
+                                                                          ? 'bg-blue-100 text-blue-700' 
+                                                                          : 'bg-red-100 text-red-700'
+                                                                  }`}
+                                                                  title={`${personInfo.name}과 총 ${meetCount}번 만남`}
+                                                                >
+                                                                  {personInfo.name} {isExited ? '❌' : personInfo.gender === 'male' ? '👨' : '👩'}
+                                                                  {meetCount > 1 && (
+                                                                    <sup className="ml-0.5 text-xs font-bold bg-orange-500 text-white px-1 rounded-full">
+                                                                      {meetCount}
+                                                                    </sup>
+                                                                  )}
+                                                                  {round === result.round && (
+                                                                    <span className="ml-1">✨</span>
+                                                                  )}
+                                                                </span>
+                                                              )
+                                                            })}
+                                                          </div>
+                                                        ) : (
+                                                          <p className="text-xs text-gray-400">이 라운드에서는 아무도 만나지 않았습니다.</p>
+                                                        )}
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                  
+                                                  {/* 만남 횟수별 요약 */}
+                                                  {Object.keys(meetingCount).length > 0 && (
+                                                    <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                                                      <div className="text-sm font-semibold text-orange-700 mb-2 flex items-center">
+                                                        <span className="text-orange-500 mr-1">🔥</span>
+                                                        자주 만난 사람들
+                                                      </div>
+                                                      <div className="flex flex-wrap gap-1.5">
+                                                        {Object.entries(meetingCount)
+                                                          .sort(([,a], [,b]) => b - a)
+                                                          .slice(0, 10)
+                                                          .map(([personId, count]) => {
+                                                            const person = participants.find(p => p.id === personId) || exitedParticipants[personId]
+                                                            if (!person) return null
+                                                            const isExited = !participants.find(p => p.id === personId)
+                                                            
+                                                            return (
+                                                              <span 
+                                                                key={personId}
+                                                                className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                                                  count >= 3 
+                                                                    ? 'bg-red-200 text-red-800'
+                                                                    : count >= 2
+                                                                      ? 'bg-yellow-200 text-yellow-800'
+                                                                      : 'bg-gray-200 text-gray-700'
+                                                                } ${isExited ? 'opacity-60' : ''}`}
+                                                              >
+                                                                {person.name} {isExited ? '❌' : person.gender === 'male' ? '👨' : '👩'} × {count}
+                                                              </span>
+                                                            )
+                                                          })}
+                                                      </div>
+                                                      <div className="text-xs text-orange-600 mt-2">
+                                                        💡 숫자는 총 만난 횟수를 나타냅니다
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )
                     })()}
