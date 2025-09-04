@@ -94,6 +94,9 @@ export default function ResultPage() {
     mbti: 'extrovert' as 'extrovert' | 'introvert'
   })  // 편집 폼 데이터
 
+  // 참가자 히스토리 모달 상태
+  const [showHistoryModal, setShowHistoryModal] = useState<string | null>(null)         // 히스토리를 표시할 참가자 ID
+
   // 탭 변경 함수 - localStorage에 저장
   const changeActiveTab = (tab: 'groups' | 'stats' | 'seating') => {
     setActiveTab(tab)
@@ -1235,6 +1238,16 @@ export default function ResultPage() {
                             {!isSelected && !isSwapTarget && (
                               <div className="flex gap-1">
                                 <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setShowHistoryModal(member.id)
+                                  }}
+                                  className="text-blue-500 hover:text-blue-700 text-xs px-1 py-1 rounded hover:bg-blue-100 transition-colors"
+                                  title="만남 히스토리 보기"
+                                >
+                                  📊
+                                </button>
+                                <button
                                   onClick={() => startEditParticipant(member.id)}
                                   className="text-purple-500 hover:text-purple-700 text-xs px-1 py-1 rounded hover:bg-purple-100 transition-colors"
                                   title="참가자 정보 수정"
@@ -1838,6 +1851,178 @@ export default function ResultPage() {
           </div>
         </div>
       </div>
+
+      {/* 참가자 히스토리 모달 */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            {(() => {
+              const participant = participants.find(p => p.id === showHistoryModal)
+              if (!participant) return null
+
+              // 만난 횟수 계산
+              const meetingCount: {[key: string]: number} = {}
+              Object.values(participant.meetingsByRound || {}).forEach((roundMeetings: any) => {
+                if (Array.isArray(roundMeetings)) {
+                  roundMeetings.forEach((personId: string) => {
+                    meetingCount[personId] = (meetingCount[personId] || 0) + 1
+                  })
+                }
+              })
+
+              // 라운드별 만남 데이터 정리
+              const roundEntries = Object.entries(participant.meetingsByRound || {})
+                .map(([round, meetings]) => ({ 
+                  round: parseInt(round), 
+                  meetings: Array.isArray(meetings) ? meetings as string[] : []
+                }))
+                .sort((a, b) => a.round - b.round)
+
+              return (
+                <>
+                  {/* 모달 헤더 */}
+                  <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                        <span className="text-blue-500 mr-2">📊</span>
+                        {participant.name}님의 만남 히스토리
+                      </h3>
+                      <button
+                        onClick={() => setShowHistoryModal(null)}
+                        className="text-gray-500 hover:text-gray-700 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 모달 내용 */}
+                  <div className="p-6 overflow-y-auto max-h-[60vh]">
+                    {roundEntries.length === 0 ? (
+                      <p className="text-gray-500 text-sm text-center py-8">아직 만난 사람이 없습니다.</p>
+                    ) : (
+                      <div className="space-y-6">
+                        {/* 전체 통계 */}
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-blue-800 mb-3">전체 통계</h4>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-gray-600">총 만난 사람:</span>
+                              <span className="ml-2 font-medium text-blue-700">
+                                {Object.keys(meetingCount).length}명
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">참여 라운드:</span>
+                              <span className="ml-2 font-medium text-blue-700">
+                                {roundEntries.length}라운드
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">총 만난 이성:</span>
+                              <span className="ml-2 font-medium text-pink-700">
+                                {(() => {
+                                  const oppositeGenderCount = Object.keys(meetingCount).filter(personId => {
+                                    const metPerson = participants.find(p => p.id === personId) || exitedParticipants[personId]
+                                    if (!metPerson) return false
+                                    const metPersonGender = metPerson.gender
+                                    return metPersonGender !== participant.gender
+                                  }).length
+                                  return oppositeGenderCount
+                                })()}명
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-600">총 만난 동성:</span>
+                              <span className="ml-2 font-medium text-blue-700">
+                                {(() => {
+                                  const sameGenderCount = Object.keys(meetingCount).filter(personId => {
+                                    const metPerson = participants.find(p => p.id === personId) || exitedParticipants[personId]
+                                    if (!metPerson) return false
+                                    const metPersonGender = metPerson.gender
+                                    return metPersonGender === participant.gender
+                                  }).length
+                                  return sameGenderCount
+                                })()}명
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 라운드별 만남 */}
+                        <div>
+                          <h4 className="font-medium text-gray-800 mb-3">라운드별 만남</h4>
+                          <div className="space-y-3">
+                            {roundEntries.map(({ round, meetings }) => {
+                              // 해당 라운드에서 몇 번째 그룹(테이블)이었는지 찾기
+                              const tableNumber = participant.groupHistory && participant.groupHistory[round - 1] 
+                                ? participant.groupHistory[round - 1] 
+                                : '?'
+                              
+                              return (
+                                <div key={round} className="border border-gray-200 rounded-lg p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="font-medium text-purple-600">
+                                        {round}라운드
+                                      </span>
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                        {tableNumber}번 테이블
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-gray-500">
+                                      {meetings.length}명과 만남
+                                    </span>
+                                  </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {meetings.map(personId => {
+                                    const participantPerson = participants.find(p => p.id === personId)
+                                    const exitedPerson = exitedParticipants[personId]
+                                    
+                                    if (!participantPerson && !exitedPerson) return null
+
+                                    const personName = participantPerson?.name || exitedPerson?.name || '알 수 없음'
+                                    const personGender = participantPerson?.gender || exitedPerson?.gender || 'male'
+                                    const meetCount = meetingCount[personId] || 0
+                                    const isOppositeGender = personGender !== participant.gender
+
+                                    return (
+                                      <div
+                                        key={personId}
+                                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${
+                                          meetCount > 1
+                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
+                                            : isOppositeGender
+                                            ? 'bg-pink-100 text-pink-700 border-pink-200'
+                                            : 'bg-blue-100 text-blue-700 border-blue-200'
+                                        }`}
+                                      >
+                                        <span className="mr-1">
+                                          {personGender === 'male' ? '👨' : '👩'}
+                                        </span>
+                                        <span>{personName}</span>
+                                        {meetCount > 1 && (
+                                          <span className="ml-1 bg-orange-200 text-orange-800 px-1 rounded-full text-xs font-bold">
+                                            {meetCount}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )})}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
