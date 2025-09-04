@@ -1989,17 +1989,14 @@ export default function ResultPage() {
                                     const personName = participantPerson?.name || exitedPerson?.name || '알 수 없음'
                                     const personGender = participantPerson?.gender || exitedPerson?.gender || 'male'
                                     const meetCount = meetingCount[personId] || 0
-                                    const isOppositeGender = personGender !== participant.gender
 
                                     return (
                                       <div
                                         key={personId}
-                                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${
-                                          meetCount > 1
-                                            ? 'bg-orange-100 text-orange-700 border-orange-200'
-                                            : isOppositeGender
-                                            ? 'bg-pink-100 text-pink-700 border-pink-200'
-                                            : 'bg-blue-100 text-blue-700 border-blue-200'
+                                        className={`relative inline-flex items-center px-2 py-1 rounded-full text-xs border ${
+                                          personGender === 'male'
+                                            ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                            : 'bg-red-100 text-red-700 border-red-200'
                                         }`}
                                       >
                                         <span className="mr-1">
@@ -2007,7 +2004,7 @@ export default function ResultPage() {
                                         </span>
                                         <span>{personName}</span>
                                         {meetCount > 1 && (
-                                          <span className="ml-1 bg-orange-200 text-orange-800 px-1 rounded-full text-xs font-bold">
+                                          <span className="absolute -top-1 -right-1 bg-orange-500 text-white px-1 rounded-full text-xs font-bold min-w-[16px] h-4 flex items-center justify-center">
                                             {meetCount}
                                           </span>
                                         )}
