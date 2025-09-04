@@ -1683,6 +1683,11 @@ export default function ResultPage() {
                                                     <div className="space-y-3 max-h-60 overflow-y-auto">
                                                       {roundEntries.map(({ round, meetings }) => {
                                                         const meetingsArray = Array.isArray(meetings) ? meetings : []
+                                                        // 해당 라운드에서 몇 번째 그룹(테이블)이었는지 찾기
+                                                        const tableNumber = participant.groupHistory && participant.groupHistory[round - 1] 
+                                                          ? participant.groupHistory[round - 1] 
+                                                          : '?'
+                                                        
                                                         return (
                                                         <div
                                                           key={round}
@@ -1693,8 +1698,8 @@ export default function ResultPage() {
                                                           }`}
                                                         >
                                                           <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center">
-                                                              <span className={`text-sm font-bold px-2 py-1 rounded-full mr-2 ${
+                                                            <div className="flex items-center space-x-2">
+                                                              <span className={`text-sm font-bold px-2 py-1 rounded-full ${
                                                                 round === result.round
                                                                   ? 'bg-green-500 text-white'
                                                                   : 'bg-gray-500 text-white'
@@ -1703,6 +1708,9 @@ export default function ResultPage() {
                                                               </span>
                                                               <span className="text-sm font-medium text-gray-700">
                                                                 {round === result.round ? '현재 라운드' : `${round}라운드`}
+                                                              </span>
+                                                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                                                {tableNumber}번 테이블
                                                               </span>
                                                             </div>
                                                             <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
