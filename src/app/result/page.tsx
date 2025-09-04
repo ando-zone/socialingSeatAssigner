@@ -1643,11 +1643,13 @@ export default function ResultPage() {
 
                                               {(() => {
                                                 // 만난 횟수 계산
-                                                const meetingCount = {}
-                                                Object.values(participant.meetingsByRound || {}).forEach(roundMeetings => {
-                                                  roundMeetings.forEach(personId => {
-                                                    meetingCount[personId] = (meetingCount[personId] || 0) + 1
-                                                  })
+                                                const meetingCount: Record<string, number> = {}
+                                                Object.values(participant.meetingsByRound || {}).forEach((roundMeetings: unknown) => {
+                                                  if (Array.isArray(roundMeetings)) {
+                                                    roundMeetings.forEach((personId: string) => {
+                                                      meetingCount[personId] = (meetingCount[personId] || 0) + 1
+                                                    })
+                                                  }
                                                 })
 
                                                 // 라운드별 만남 데이터 정리
@@ -1673,13 +1675,15 @@ export default function ResultPage() {
                                                       </div>
                                                       <div className="text-xs text-purple-600">
                                                         라운드: {roundEntries.length}개 |
-                                                        총 만남: {Object.values(meetingCount).reduce((sum, count) => sum + count, 0)}회
+                                                        총 만남: {Object.values(meetingCount).reduce((sum: number, count: number) => sum + count, 0)}회
                                                       </div>
                                                     </div>
 
                                                     {/* 라운드별 만남 목록 */}
                                                     <div className="space-y-3 max-h-60 overflow-y-auto">
-                                                      {roundEntries.map(({ round, meetings }) => (
+                                                      {roundEntries.map(({ round, meetings }) => {
+                                                        const meetingsArray = Array.isArray(meetings) ? meetings : []
+                                                        return (
                                                         <div
                                                           key={round}
                                                           className={`p-3 rounded-lg border-2 ${
@@ -1702,13 +1706,13 @@ export default function ResultPage() {
                                                               </span>
                                                             </div>
                                                             <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded-full border">
-                                                              {meetings.length}명
+                                                              {meetingsArray.length}명
                                                             </span>
                                                           </div>
 
-                                                          {meetings.length > 0 ? (
+                                                          {meetingsArray.length > 0 ? (
                                                             <div className="flex flex-wrap gap-1.5">
-                                                              {meetings.map(meetingId => {
+                                                              {meetingsArray.map((meetingId: string) => {
                                                                 const meetingPerson = sortedParticipants.find(p => p.id === meetingId)
                                                                 const exitedPerson = exitedParticipants[meetingId]
 
@@ -1716,7 +1720,7 @@ export default function ResultPage() {
 
                                                                 const personInfo = meetingPerson || exitedPerson
                                                                 const isExited = !meetingPerson
-                                                                const meetCount = meetingCount[meetingId] || 1
+                                                                const meetCount = (meetingCount[meetingId] as number) || 1
 
                                                                 return (
                                                                   <span
@@ -1751,7 +1755,8 @@ export default function ResultPage() {
                                                             <p className="text-xs text-gray-400">이 라운드에서는 아무도 만나지 않았습니다.</p>
                                                           )}
                                                         </div>
-                                                      ))}
+                                                        )
+                                                      })}
                                                     </div>
 
                                                     {/* 만남 횟수별 요약 */}
@@ -1763,7 +1768,7 @@ export default function ResultPage() {
                                                         </div>
                                                         <div className="flex flex-wrap gap-1.5">
                                                           {Object.entries(meetingCount)
-                                                            .sort(([,a], [,b]) => b - a)
+                                                            .sort(([,a], [,b]) => (b as number) - (a as number))
                                                             .slice(0, 10)
                                                             .map(([personId, count]) => {
                                                               const person = sortedParticipants.find(p => p.id === personId) || exitedParticipants[personId]
@@ -1774,9 +1779,9 @@ export default function ResultPage() {
                                                                 <span
                                                                   key={personId}
                                                                   className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                                    count >= 3 
+                                                                    (count as number) >= 3 
                                                                       ? 'bg-red-200 text-red-800'
-                                                                      : count >= 2
+                                                                      : (count as number) >= 2
                                                                         ? 'bg-yellow-200 text-yellow-800'
                                                                         : 'bg-gray-200 text-gray-700'
                                                                   } ${isExited ? 'opacity-60' : ''}`}
