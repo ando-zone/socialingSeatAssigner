@@ -37,7 +37,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { GroupingResult, Participant } from '@/utils/grouping'
+import type { GroupingResult, Participant, Group } from '@/utils/grouping'
 import { migrateParticipantData } from '@/utils/grouping'
 import { createSnapshot } from '@/utils/backup'
 import SeatingChart from '@/components/SeatingChart'
@@ -96,6 +96,9 @@ export default function ResultPage() {
 
   // 참가자 히스토리 모달 상태
   const [showHistoryModal, setShowHistoryModal] = useState<string | null>(null)         // 히스토리를 표시할 참가자 ID
+  
+  // 좌석 배치도 라운드 선택 상태
+  const [selectedSeatingRound, setSelectedSeatingRound] = useState<number>(result?.round || 1)
 
   // 탭 변경 함수 - localStorage에 저장
   const changeActiveTab = (tab: 'groups' | 'stats' | 'seating') => {
@@ -1347,11 +1350,101 @@ export default function ResultPage() {
         )}
 
         {activeTab === 'seating' && result && (
-          <SeatingChart
-            groups={result.groups}
-            participants={participants}
-            onPrint={() => window.print()}
-          />
+          <div className="space-y-6">
+            {/* 라운드 선택 헤더 */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                  <span className="text-purple-500 mr-2">🪑</span>
+                  좌석 배치도
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">라운드 선택:</span>
+                  <select
+                    value={selectedSeatingRound}
+                    onChange={(e) => setSelectedSeatingRound(Number(e.target.value))}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  >
+                    {Array.from({ length: result.round }, (_, i) => i + 1).map(round => (
+                      <option key={round} value={round}>
+                        {round}라운드 {round === result.round ? '(현재)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              {selectedSeatingRound !== result.round && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-center">
+                    <span className="text-amber-600 mr-2">⏰</span>
+                    <span className="text-sm text-amber-700">
+                      {selectedSeatingRound}라운드의 과거 배치를 보고 있습니다.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 선택된 라운드의 좌석 배치도 */}
+            {(() => {
+              // 선택된 라운드의 그룹 데이터 재구성
+              const reconstructHistoricalGroups = (round: number): Group[] => {
+                if (round === result.round) {
+                  // 현재 라운드면 그대로 사용
+                  return result.groups
+                }
+
+                // 과거 라운드의 경우 groupHistory에서 재구성
+                const historicalGroups: { [groupId: number]: any[] } = {}
+                
+                participants.forEach(participant => {
+                  if (participant.groupHistory && participant.groupHistory[round - 1] !== undefined) {
+                    const groupId = participant.groupHistory[round - 1]
+                    if (!historicalGroups[groupId]) {
+                      historicalGroups[groupId] = []
+                    }
+                    historicalGroups[groupId].push({
+                      id: participant.id,
+                      name: participant.name,
+                      gender: participant.gender,
+                      mbti: participant.mbti
+                    })
+                  }
+                })
+
+                // 이탈한 참가자들은 과거 라운드에서는 제외 (groupHistory가 없음)
+
+                // 그룹 배열로 변환하고 필요한 통계 계산
+                return Object.entries(historicalGroups).map(([groupId, members]) => {
+                  const maleCount = members.filter(m => m.gender === 'male').length
+                  const femaleCount = members.filter(m => m.gender === 'female').length
+                  const extrovertCount = members.filter(m => m.mbti === 'extrovert').length
+                  const introvertCount = members.filter(m => m.mbti === 'introvert').length
+                  
+                  return {
+                    id: Number(groupId),
+                    members: members,
+                    maleCount,
+                    femaleCount,
+                    extrovertCount,
+                    introvertCount,
+                    newMeetingsCount: 0 // 과거 라운드는 새로운 만남 계산 생략
+                  }
+                }).sort((a, b) => a.id - b.id)
+              }
+
+              const groupsToShow = reconstructHistoricalGroups(selectedSeatingRound)
+
+              return (
+                <SeatingChart
+                  groups={groupsToShow}
+                  participants={participants}
+                  onPrint={() => window.print()}
+                />
+              )
+            })()}
+          </div>
         )}
 
         {activeTab === 'stats' && (
