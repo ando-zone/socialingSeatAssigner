@@ -45,6 +45,7 @@ export interface DBParticipant {
   meetings_by_round: Record<string, string[]>  // 라운드별 만난 사람들의 ID 목록
   all_met_people: string[]                    // 전체 만난 사람들의 ID 목록 (중복 제거)
   group_history: number[]                     // 각 라운드별 그룹 번호 히스토리
+  is_checked_in: boolean                      // 참석 체크인 여부
   created_at: string                          // 생성일시
   updated_at: string                          // 최종 수정일시
 }
@@ -303,7 +304,8 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
         mbti: p.mbti,
         meetings_by_round: p.meetingsByRound,
         all_met_people: p.allMetPeople,
-        group_history: p.groupHistory
+        group_history: p.groupHistory,
+        is_checked_in: p.isCheckedIn !== undefined ? p.isCheckedIn : true
       }))
 
       const { error } = await supabase
@@ -316,6 +318,37 @@ export const saveParticipants = async (participants: Participant[]): Promise<boo
     return true
   } catch (error) {
     console.error('참가자 저장 중 오류:', error)
+    return false
+  }
+}
+
+/**
+ * 참가자의 체크인 상태를 업데이트합니다.
+ * 
+ * @param participantId - 체크인 상태를 변경할 참가자 ID
+ * @param isCheckedIn - 새로운 체크인 상태
+ * @returns 업데이트 성공 여부
+ */
+export const updateParticipantCheckIn = async (
+  participantId: string, 
+  isCheckedIn: boolean
+): Promise<boolean> => {
+  const supabase = createSupabaseClient()
+  if (!supabase) return false
+  
+  try {
+    const { error } = await supabase
+      .from('participants')
+      .update({ 
+        is_checked_in: isCheckedIn,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', participantId)
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('체크인 상태 업데이트 중 오류:', error)
     return false
   }
 }
@@ -353,7 +386,8 @@ export const getParticipants = async (): Promise<Participant[]> => {
       mbti: p.mbti,
       meetingsByRound: p.meetings_by_round || {},
       allMetPeople: p.all_met_people || [],
-      groupHistory: p.group_history || []
+      groupHistory: p.group_history || [],
+      isCheckedIn: p.is_checked_in !== undefined ? p.is_checked_in : true
     }))
   } catch (error) {
     console.error('참가자 조회 중 오류:', error)

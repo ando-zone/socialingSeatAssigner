@@ -32,6 +32,7 @@ export interface Participant {
   meetingsByRound: { [round: number]: string[] } // 라운드별 만난 사람들의 ID 목록
   allMetPeople: string[]                       // 전체 만난 사람 목록 (중복 제거된 통합 뷰)
   groupHistory: number[]                       // 각 라운드별 소속했던 그룹 번호 히스토리
+  isCheckedIn: boolean                         // 참석 체크인 여부
 }
 
 /**
@@ -154,6 +155,9 @@ export function migrateParticipantData(participants: Participant[], currentRound
     }
     if (!participant.groupHistory) {
       participant.groupHistory = [] // 빈 배열로 초기화
+    }
+    if (participant.isCheckedIn === undefined) {
+      participant.isCheckedIn = true // 기본값으로 체크인됨
     }
     
     // allMetPeople는 result 페이지에서 실시간 계산하므로 여기서는 초기화만 수행

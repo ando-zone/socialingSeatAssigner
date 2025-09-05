@@ -26,8 +26,9 @@
 
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import type { Group, Participant } from '@/utils/grouping'
+import { updateParticipantCheckIn } from '@/utils/database'
 
 /**
  * 개별 좌석의 위치와 방향 정보
@@ -86,6 +87,66 @@ interface SeatingChartProps {
  * @returns {JSX.Element} SVG 기반 좌석 배치도와 참가자 목록
  */
 export default function SeatingChart({ groups, participants, onPrint }: SeatingChartProps) {
+  // 체크인 상태 관리
+  const [checkInStatus, setCheckInStatus] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    participants.forEach(p => {
+      initial[p.id] = p.isCheckedIn !== undefined ? p.isCheckedIn : true
+    })
+    return initial
+  })
+  
+  // 체크인 상태 토글 함수
+  const toggleCheckIn = async (participantId: string) => {
+    const newStatus = !checkInStatus[participantId]
+    
+    try {
+      const success = await updateParticipantCheckIn(participantId, newStatus)
+      if (success) {
+        setCheckInStatus(prev => ({
+          ...prev,
+          [participantId]: newStatus
+        }))
+      } else {
+        alert('체크인 상태 업데이트에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('체크인 상태 업데이트 오류:', error)
+      alert('체크인 상태 업데이트 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 일괄 체크인/체크아웃 함수
+  const bulkUpdateCheckIn = async (participantIds: string[], newStatus: boolean, groupName: string = '') => {
+    const statusText = newStatus ? '참석' : '미참석'
+    const groupText = groupName ? `${groupName} ` : ''
+    const confirmMessage = `${groupText}${participantIds.length}명을 모두 "${statusText}"으로 변경하시겠습니까?`
+    
+    if (!window.confirm(confirmMessage)) {
+      return // 사용자가 취소한 경우
+    }
+
+    try {
+      const promises = participantIds.map(id => updateParticipantCheckIn(id, newStatus))
+      const results = await Promise.all(promises)
+      
+      if (results.every(result => result)) {
+        setCheckInStatus(prev => {
+          const newState = { ...prev }
+          participantIds.forEach(id => {
+            newState[id] = newStatus
+          })
+          return newState
+        })
+      } else {
+        alert('일부 참가자의 체크인 상태 업데이트에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('일괄 체크인 상태 업데이트 오류:', error)
+      alert('일괄 체크인 상태 업데이트 중 오류가 발생했습니다.')
+    }
+  }
+
   // 배치도 레이아웃 상수 정의
   const SEATS_PER_TABLE = 8     // 테이블당 최대 좌석 수 (사각 테이블 기준)
   const TABLE_WIDTH = 200       // 테이블 너비 (px)
@@ -285,13 +346,15 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
 
       {/* 참가자 테이블 찾기 미니 시트 */}
       <div className="mt-12 bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-6 border-2 border-blue-200">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-blue-500 p-2 rounded-lg">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-            </svg>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-500 p-2 rounded-lg">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">📋 참가자 테이블 찾기</h2>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800">📋 참가자 테이블 찾기</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -307,23 +370,67 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
 
             return allMaleMembers.length > 0 && (
               <div className="bg-white rounded-lg p-4 shadow-md">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-blue-700">👨 남성 ({allMaleMembers.length}명)</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                    <h3 className="text-xl font-bold text-blue-700">👨 남성 ({allMaleMembers.length}명)</h3>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => bulkUpdateCheckIn(allMaleMembers.map(m => m.id), true, '남성 참가자')}
+                      className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium transition-colors"
+                      title="남성 전체 참석"
+                    >
+                      전체 참석
+                    </button>
+                    <button
+                      onClick={() => bulkUpdateCheckIn(allMaleMembers.map(m => m.id), false, '남성 참가자')}
+                      className="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors"
+                      title="남성 전체 미참석"
+                    >
+                      전체 미참석
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {allMaleMembers.map((member, index) => (
                     <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => toggleCheckIn(member.id)}
+                          className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all ${
+                            checkInStatus[member.id]
+                              ? 'bg-green-500 border-green-500 text-white hover:bg-green-600'
+                              : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
+                          }`}
+                          title={checkInStatus[member.id] ? '체크인됨 (클릭해서 해제)' : '체크인하기'}
+                        >
+                          {checkInStatus[member.id] && (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
                         <span className="text-sm text-blue-600 font-medium w-6 text-center">
                           {index + 1}
                         </span>
-                        <span className="text-lg font-semibold text-gray-800">
+                        <span className={`text-lg font-semibold transition-all ${
+                          checkInStatus[member.id] ? 'text-gray-800' : 'text-gray-500'
+                        }`}>
                           {member.name}
                         </span>
                       </div>
-                      <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                        테이블 {member.tableId}
+                      <div className="flex items-center gap-2">
+                        <div className={`px-2 py-1 rounded-full text-xs font-bold transition-all ${
+                          checkInStatus[member.id]
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {checkInStatus[member.id] ? '참석' : '미참석'}
+                        </div>
+                        <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                          테이블 {member.tableId}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -344,23 +451,67 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
 
             return allFemaleMembers.length > 0 && (
               <div className="bg-white rounded-lg p-4 shadow-md">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-4 h-4 bg-pink-500 rounded-full"></div>
-                  <h3 className="text-xl font-bold text-pink-700">👩 여성 ({allFemaleMembers.length}명)</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-pink-500 rounded-full"></div>
+                    <h3 className="text-xl font-bold text-pink-700">👩 여성 ({allFemaleMembers.length}명)</h3>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => bulkUpdateCheckIn(allFemaleMembers.map(m => m.id), true, '여성 참가자')}
+                      className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-medium transition-colors"
+                      title="여성 전체 참석"
+                    >
+                      전체 참석
+                    </button>
+                    <button
+                      onClick={() => bulkUpdateCheckIn(allFemaleMembers.map(m => m.id), false, '여성 참가자')}
+                      className="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors"
+                      title="여성 전체 미참석"
+                    >
+                      전체 미참석
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {allFemaleMembers.map((member, index) => (
                     <div key={member.id} className="flex items-center justify-between py-2 px-3 bg-pink-50 rounded-lg hover:bg-pink-100 transition-colors">
                       <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => toggleCheckIn(member.id)}
+                          className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all ${
+                            checkInStatus[member.id]
+                              ? 'bg-green-500 border-green-500 text-white hover:bg-green-600'
+                              : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
+                          }`}
+                          title={checkInStatus[member.id] ? '체크인됨 (클릭해서 해제)' : '체크인하기'}
+                        >
+                          {checkInStatus[member.id] && (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
                         <span className="text-sm text-pink-600 font-medium w-6 text-center">
                           {index + 1}
                         </span>
-                        <span className="text-lg font-semibold text-gray-800">
+                        <span className={`text-lg font-semibold transition-all ${
+                          checkInStatus[member.id] ? 'text-gray-800' : 'text-gray-500'
+                        }`}>
                           {member.name}
                         </span>
                       </div>
-                      <div className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-bold">
-                        테이블 {member.tableId}
+                      <div className="flex items-center gap-2">
+                        <div className={`px-2 py-1 rounded-full text-xs font-bold transition-all ${
+                          checkInStatus[member.id]
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {checkInStatus[member.id] ? '참석' : '미참석'}
+                        </div>
+                        <div className="bg-pink-500 text-white px-3 py-1 rounded-full text-sm font-bold">
+                          테이블 {member.tableId}
+                        </div>
                       </div>
                     </div>
                   ))}

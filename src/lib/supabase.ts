@@ -128,6 +128,7 @@ export interface Database {
           meetings_by_round: Record<string, string[]> // 라운드별 만난 사람들 기록
           all_met_people: string[]                    // 전체 만난 사람들 목록
           group_history: number[]                     // 소속했던 그룹 번호 히스토리
+          is_checked_in: boolean                      // 참석 체크인 여부
           created_at: string                          // 참가자 등록 시각
           updated_at: string                          // 마지막 수정 시각
         }
@@ -140,6 +141,7 @@ export interface Database {
           meetings_by_round?: Record<string, string[]>
           all_met_people?: string[]
           group_history?: number[]
+          is_checked_in?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -152,6 +154,7 @@ export interface Database {
           meetings_by_round?: Record<string, string[]>
           all_met_people?: string[]
           group_history?: number[]
+          is_checked_in?: boolean
           created_at?: string
           updated_at?: string
         }

@@ -375,7 +375,8 @@ export default function ResultPage() {
         [currentRound]: [...existingMemberIds] // 현재 라운드에서 기존 멤버들과 만남
       },
       allMetPeople: [...existingMemberIds], // 전체 만난 사람 목록
-      groupHistory: [groupId] // 현재 그룹을 히스토리에 추가
+      groupHistory: [groupId], // 현재 그룹을 히스토리에 추가
+      isCheckedIn: true // 기본값으로 체크인됨
     }
 
     // 기존 참가자들의 만남 기록도 업데이트 (새 참가자와 만났다고 추가)

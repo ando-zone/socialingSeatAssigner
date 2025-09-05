@@ -88,7 +88,8 @@ export default function Home() {
         mbti,
         meetingsByRound: {},
         allMetPeople: [],
-        groupHistory: []
+        groupHistory: [],
+        isCheckedIn: true
       }
       const updatedParticipants = [...participants, newParticipant]
       
@@ -734,7 +735,8 @@ export default function Home() {
           mbti,
           meetingsByRound: {},
           allMetPeople: [],
-          groupHistory: []
+          groupHistory: [],
+          isCheckedIn: true
         })
       }
     })
