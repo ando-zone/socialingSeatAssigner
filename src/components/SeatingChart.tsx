@@ -26,7 +26,7 @@
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import type { Group, Participant } from '@/utils/grouping'
 import { updateParticipantCheckIn } from '@/utils/database'
 
@@ -95,6 +95,27 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
     })
     return initial
   })
+
+  // 스크롤 위치 복원 및 저장
+  useEffect(() => {
+    // 페이지 로드 시 저장된 스크롤 위치 복원
+    const savedScrollY = localStorage.getItem('seatingChart-scrollY')
+    if (savedScrollY) {
+      window.scrollTo(0, parseInt(savedScrollY))
+    }
+
+    // 스크롤 이벤트 리스너 추가
+    const handleScroll = () => {
+      localStorage.setItem('seatingChart-scrollY', window.scrollY.toString())
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
   
   // 체크인 상태 토글 함수
   const toggleCheckIn = async (participantId: string) => {
