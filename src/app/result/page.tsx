@@ -97,8 +97,15 @@ export default function ResultPage() {
   // 참가자 히스토리 모달 상태
   const [showHistoryModal, setShowHistoryModal] = useState<string | null>(null)         // 히스토리를 표시할 참가자 ID
   
-  // 좌석 배치도 라운드 선택 상태
+  // 좌석 배치도 라운드 선택 상태 (기본적으로 현재 라운드로 설정)
   const [selectedSeatingRound, setSelectedSeatingRound] = useState<number>(result?.round || 1)
+
+  // result가 변경될 때마다 현재 라운드로 자동 업데이트
+  useEffect(() => {
+    if (result) {
+      setSelectedSeatingRound(result.round)
+    }
+  }, [result])
 
   // 탭 변경 함수 - localStorage에 저장
   const changeActiveTab = (tab: 'groups' | 'stats' | 'seating') => {
@@ -1352,25 +1359,51 @@ export default function ResultPage() {
         {activeTab === 'seating' && result && (
           <div className="space-y-6">
             {/* 라운드 선택 헤더 */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-                  <span className="text-purple-500 mr-2">🪑</span>
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl shadow-lg p-6 border border-purple-100">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center">
                   좌석 배치도
                 </h3>
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">라운드 선택:</span>
-                  <select
-                    value={selectedSeatingRound}
-                    onChange={(e) => setSelectedSeatingRound(Number(e.target.value))}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  >
-                    {Array.from({ length: result.round }, (_, i) => i + 1).map(round => (
-                      <option key={round} value={round}>
-                        {round}라운드 {round === result.round ? '(현재)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                
+                {/* 트렌디한 라운드 선택 UI */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <span className="text-sm font-medium text-gray-600">라운드 선택</span>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: result.round }, (_, i) => i + 1).map(round => {
+                      const isCurrentRound = round === result.round
+                      const isSelected = round === selectedSeatingRound
+                      
+                      return (
+                        <button
+                          key={round}
+                          onClick={() => setSelectedSeatingRound(round)}
+                          className={`
+                            relative px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 transform hover:scale-105
+                            ${isSelected 
+                              ? isCurrentRound
+                                ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg'
+                                : 'bg-gradient-to-r from-gray-600 to-gray-700 text-white shadow-lg'
+                              : isCurrentRound
+                                ? 'bg-white text-purple-600 border-2 border-purple-200 hover:border-purple-300'
+                                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
+                            }
+                          `}
+                        >
+                          <span className="relative z-10">
+                            {round}라운드
+                          </span>
+                          {isCurrentRound && (
+                            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+                              NOW
+                            </div>
+                          )}
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-white opacity-20 rounded-lg"></div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
               

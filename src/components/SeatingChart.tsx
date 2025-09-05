@@ -215,9 +215,6 @@ export default function SeatingChart({ groups, participants, onPrint }: SeatingC
 
   return (
     <div className="w-full">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">좌석 배치도</h2>
-      </div>
 
       {/* 테이블별 상세 정보 */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
